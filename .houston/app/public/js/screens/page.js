@@ -1,7 +1,7 @@
 // A page (#/p/<project>/<cadence>[/<period>]): the period list, the Notes document (rich editor, saved
 // as you type, synced to GitHub by the server) and, beside it, everyone's Updates with a Blocked
 // roll-up on top and each update's run health shown before its content. Frozen periods are read-only.
-import { get, put, post, state } from "../api.js";
+import { get, put, post, state, cached, forget } from "../api.js";
 import { $, $$, html, raw, setHTML, I, bar, avatar, notice, errorNotice, time, rel, ago, plural, longDay, shortDay, skeletonBlock, toast, busy, copy, codeText } from "../ui.js";
 import { prefetch, chipHTML } from "../issues.js";
 import { md, refsIn } from "../markdown.js";
@@ -36,7 +36,10 @@ export function mount(main, route) {
     await flush();
     const [project, cadence, period] = r.parts;
     s.key = `${project}/${cadence}${period ? `/${period}` : ""}`;
-    s.data = null;
+    // A period seen before draws at once from the last answer, then refreshes (no skeleton flash).
+    s.data = cached(`/page/${s.key}`) ?? null;
+    s.hash = s.data?.notesHash ?? null;
+    s.notesText = s.data?.notes ?? null;
     s.error = null;
     s.conflict = null;
     s.seen = null;
@@ -45,6 +48,7 @@ export function mount(main, route) {
     setSave("", "");
     unmountEditor();
     frame();
+    if (s.data) draw();
     await load(true);
   }
   async function load(first) {
@@ -113,6 +117,7 @@ export function mount(main, route) {
       const r = await put(`/page/${key}`, { text, hash: s.hash });
       s.hash = r.hash;
       s.notesText = text;
+      forget("/page/"); // the cached answers no longer match the file
       setSave("", r.unpushed ? "Saved · syncing to GitHub shortly" : "Saved");
       clearTimeout(s.syncTimer);
       if (r.syncInMs != null) s.syncTimer = setTimeout(() => s.key && load(false), r.syncInMs + 4000);
@@ -386,7 +391,7 @@ export function mount(main, route) {
     if (u.missing) {
       const bad = u.reason.kind === "last-run-failed";
       return html`<article class="update missing ${bad ? "bad" : ""} ${sel ? "sel" : ""}" data-user="${u.user}" tabindex="-1">
-        <header>${avatar(u.user)}<b>${u.user}</b>${u.me ? html`<span class="chip">you</span>` : ""}<span class="chip ${bad ? "bad" : "none"}">${{ "draft-waiting": "In your draft", "not-due": "Not due yet", "never-ran": "Never ran", "past-period": "No update" }[u.reason.kind] ?? "No update yet"}</span></header>
+        <header>${avatar(u.user)}<b>${u.user}</b>${u.me ? html`<span class="mute small">you</span>` : ""}<span class="chip ${bad ? "bad" : "none"}">${{ "draft-waiting": "In your draft", "not-due": "Not due yet", "never-ran": "Never ran", "past-period": "No update" }[u.reason.kind] ?? "No update yet"}</span></header>
         <p>${codeText(u.reason.text)}${u.reason.kind === "draft-waiting" ? html` · <a href="#/draft">Review it</a>` : ""}</p></article>`;
     }
     const f = u.footer;
@@ -395,7 +400,7 @@ export function mount(main, route) {
       : html`${f.problem ? html`<span class="chip bad" title="Sources: ${Object.entries(f.sources).map(([k, v]) => `${k} ${v}`).join(", ")}"><span class="dot bad"></span>${f.failed.join(", ")} failed</span>` : html`<span class="chip ok" title="Sources: ${Object.keys(f.sources).join(", ")} all ok"><span class="dot"></span>${f.time} · ok</span>`}
         ${f.notReviewed ? html`<span class="chip warn" title="Published on its own at the deadline: ${u.user} didn't review it"><span class="dot warn"></span>Not reviewed</span>` : ""}`;
     return html`<article class="update ${sel ? "sel" : ""}" data-user="${u.user}" tabindex="-1">
-      <header>${avatar(u.user)}<b>${u.user}</b>${u.me ? html`<span class="chip">you</span>` : ""}${u.lead ? html`<span class="mute small">lead</span>` : ""}${chips}</header>
+      <header>${avatar(u.user)}<b>${u.user}</b>${u.me ? html`<span class="mute small">you</span>` : ""}${u.lead ? html`<span class="mute small">lead</span>` : ""}${chips}</header>
       ${f?.problem ? html`<div class="health">${I.alert}<span><b>${f.failed.map(cap).join(", ")}</b> couldn't be read on this run (${f.time}), so this update may be missing work.</span></div>` : ""}
       <div class="md">${md(u.body, { shift: 1 })}</div></article>`;
   }
@@ -457,9 +462,10 @@ export function mount(main, route) {
     if (!list.length) return;
     s.sel = Math.max(0, Math.min(list.length - 1, s.sel + dir));
     drawUpdates();
-    if (innerWidth < 1180) toggleUpdates(true);
+    if (narrow()) toggleUpdates(true);
     $(".update.sel", main)?.scrollIntoView({ block: "nearest" });
   }
+  const narrow = () => (main.parentElement?.clientWidth ?? innerWidth) < 900; // the updates column is a sheet (style.css)
   const step = (to) => to && (location.hash = `#/p/${s.data.project}/${s.data.cadence.name}/${to}`);
 
   open(route);
@@ -489,11 +495,12 @@ export function mount(main, route) {
         n: () => step(s.data.next),
         ".": () => (location.hash = `#/p/${s.data.project}/${s.data.cadence.name}`),
         e: () => s.ed?.focus(),
-        u: () => (innerWidth < 1180 ? toggleUpdates() : $("#upd-list .update, #upd-list .rollup")?.focus?.() ?? $("#upd-list").scrollTo(0, 0)),
+        u: () => (narrow() ? toggleUpdates() : $("#upd-list .update, #upd-list .rollup")?.focus?.() ?? $("#upd-list").scrollTo(0, 0)),
         j: () => moveSel(1),
         k: () => moveSel(-1),
         b: () => ((s.filter = localStorage.updatesFilter = s.filter === "blocked" ? "all" : "blocked"), (s.sel = -1), drawUpdates()),
-        Escape: () => (s.showUpdates ? (toggleUpdates(false), true) : false),
+        // The open issue panel closes first (app.js); the updates sheet only exists on a narrow page.
+        Escape: () => (s.showUpdates && narrow() && document.getElementById("detail").hidden ? (toggleUpdates(false), true) : false),
       }[e.key];
       if (!run) return false;
       e.preventDefault();

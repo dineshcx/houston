@@ -1,7 +1,7 @@
 // People (#/people): one dense row per member, problems first. Health in plain words, today's
 // updates per page as small squares, Blocked lines, and the newest day log on demand.
 import { get, cached, state } from "../api.js";
-import { html, setHTML, I, bar, avatar, errorNotice, skeletonRows, codeText, ago, shortDay, plural } from "../ui.js";
+import { html, setHTML, I, bar, avatar, errorNotice, skeletonRows, codeText, ago, shortDay, plural, fullTime } from "../ui.js";
 import { md } from "../markdown.js";
 
 const RANK = { bad: 0, warn: 1, none: 2, ok: 3 };
@@ -37,8 +37,9 @@ export function mount(main) {
     const label = { published: "published", "not-reviewed": "published, not reviewed", "failed-source": "published, a source failed", missing: "no update" };
     const rows = sorted.map((p) => {
       const lvl = p.health.level;
-      const lastRun = p.run ? html`Last run ${ago(p.run.at)}` : p.lastSeen ? html`Last seen ${shortDay(p.lastSeen)}` : "";
-      return html`<div class="person">
+      // The health line usually names the last run already; only add when, in words.
+      const lastRun = p.run ? html`<span title="${fullTime(p.run.at)}">ran ${ago(p.run.at)}</span>` : p.lastSeen ? html`Last seen ${p.lastSeen === state.ctx.today ? "today" : shortDay(p.lastSeen)}` : "";
+      return html`<div class="person" role="listitem">
         ${avatar(p.user, "lg")}
         <div class="grow">
           <div class="name">${p.user}${p.me ? html`<span class="chip">you</span>` : ""}${p.lead ? html`<span class="chip">lead</span>` : ""}<span class="mute small">${lastRun}</span></div>
@@ -59,7 +60,7 @@ export function mount(main) {
       </div>`;
     });
     return html`<div class="panel" role="list" aria-label="Team members">${rows}</div>
-      <div class="legend"><span>Squares: today's pages</span><span><i class="dot"></i>published</span><span><i class="dot warn"></i>not reviewed</span><span><i class="dot bad"></i>a source failed</span><span><i class="dot none"></i>no update</span></div>
+      <div class="legend squares-legend"><span>Today's pages:</span><span><i class="sq published"></i>published</span><span><i class="sq not-reviewed"></i>not reviewed</span><span><i class="sq failed-source"></i>a source failed</span><span><i class="sq"></i>no update</span></div>
       ${
         list.length === 1
           ? html`<div class="notice info">${I.people}<div class="grow"><b>Only you so far.</b> Send teammates the repo link; in it they tell their agent “set me up”.</div>${state.ctx.repo ? html`<div class="acts"><button class="btn sm outline" data-copy="https://github.com/${state.ctx.repo}">${I.copy}Copy repo link</button></div>` : ""}</div>`

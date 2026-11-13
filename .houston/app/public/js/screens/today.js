@@ -86,7 +86,7 @@ export function mount(main) {
 function body(d, s) {
   return html`
     <div class="today-head"><div class="kicker">${d.team} · ${d.user}</div><h2>${greeting()}</h2></div>
-    ${d.lastRun?.outcome === "failed" ? notice("err", html`<b>Your last run failed ${ago(d.lastRun.at)}</b>${d.lastRun.note ? html`: ${d.lastRun.note}` : ""}. Run <code>houston doctor</code> to see why.`, copyCmd("houston doctor")) : ""}
+    ${d.lastRun?.outcome === "failed" ? notice("err", html`<b>Your last run failed ${ago(d.lastRun.at)}</b>${d.lastRun.note ? html`: ${d.lastRun.note}` : ""}. To see why, run`, copyCmd("houston doctor")) : ""}
     ${draftCard(d)}
     ${pagesPanel(d)}
     ${attention(d, s)}
@@ -132,7 +132,8 @@ function whenText(p) {
   const t = time(p.meetsAt);
   if (!p.meetsToday) return html`<span class="when">${new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: state.ctx.timezone }).format(new Date(p.meetsAt))} ${t}</span>`;
   const mins = (Date.parse(p.meetsAt) - Date.now()) / 60000;
-  return html`<span class="when ${mins > 0 && mins < 30 ? "soon" : ""}">${t}, ${mins > 0 ? rel(p.meetsAt) : `started ${rel(p.meetsAt)}`}</span>`;
+  // Long after it started, the time alone says enough ("09:00", not "09:00, started 13h 59m ago").
+  return html`<span class="when ${mins > 0 && mins < 30 ? "soon" : ""}">${t}${mins > 0 ? `, ${rel(p.meetsAt)}` : mins > -90 ? `, started ${rel(p.meetsAt)}` : ""}</span>`;
 }
 
 function pagesPanel(d) {
@@ -145,7 +146,7 @@ function pagesPanel(d) {
           <span class="grow"><span class="name">${p.projectName} · ${p.cadenceTitle}</span>${p.meetsToday ? "" : html` <span class="mute small">week of ${shortDay(p.period)}</span>`}</span>
           ${whenText(p)}
           ${seg(p)}
-          <span class="blk ${p.counts.blocked ? "" : "none"}">${p.counts.blocked ? `${p.counts.blocked} blocked` : p.counts.failedSource ? html`<span class="blk">${p.counts.failedSource} source failed</span>` : "Nothing blocked"}</span>
+          <span class="blk ${p.counts.blocked ? "" : "none"}">${p.counts.blocked ? `${p.counts.blocked} blocked` : p.counts.failedSource ? html`<span class="blk">${p.counts.failedSource} source failed</span>` : ""}</span>
         </a>`
       : html`<div class="page-row missing">
           ${teamBadge(p.projectName, "sm")}

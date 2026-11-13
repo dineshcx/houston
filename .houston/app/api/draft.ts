@@ -62,7 +62,8 @@ export function summarize(ctx: Ctx, sections: Section[]): string {
     return `${ctx.team.projects[p]?.name ?? p} · ${ctx.cadences[c]?.title ?? c}`;
   });
   return [
-    pages.length ? `Update for ${pages.join(" and ")}` : "",
+    // Past two pages a list stops being readable: "Updates for 6 pages" (the cards below name them).
+    pages.length > 2 ? `Updates for ${pages.length} pages` : pages.length ? `Update for ${pages.join(" and ")}` : "",
     n("day") ? "day log" : "",
     n("summary") ? plural(n("summary"), "issue summary").replace("summarys", "summaries") : "",
     n("labels") ? plural(n("labels"), "label change") : "",

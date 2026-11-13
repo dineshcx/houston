@@ -6,6 +6,7 @@ import { chipHTML } from "./issues.js";
 
 const SAFE_URL = /^(https?:\/\/|mailto:|#)/;
 export const REF_RE = /(^|[^\w./-])([\w.-]+\/[\w.-]+#\d+)\b/g;
+const GLUE_RE = new RegExp(`${REF_RE.source}([)\\],.;:!?]*)`, "g");
 
 /** Every owner/repo#n in a text, unique, in order. */
 export const refsIn = (text) => [...new Set([...String(text ?? "").matchAll(REF_RE)].map((m) => m[2]))];
@@ -17,7 +18,12 @@ function inline(s, opts) {
   s = s.replace(/`([^`]+)`/g, (_, c) => keep(`<code>${c}</code>`));
   s = s.replace(/\[([^\]]+)\]\(([^\s)]+)\)/g, (m, text, href) => (SAFE_URL.test(href) ? keep(`<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`) : m));
   s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (_, pre, href) => pre + keep(`<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>`));
-  s = s.replace(REF_RE, (_, pre, ref) => pre + keep(opts.chips === false ? `<span class="ident">${ref}</span>` : String(chipHTML(ref))));
+  // A chip keeps the "(" before it and the ")," after it on its line, so no bracket dangles alone.
+  s = s.replace(GLUE_RE, (_, pre, ref, post) => {
+    const chip = opts.chips === false ? `<span class="ident">${ref}</span>` : String(chipHTML(ref));
+    const open = pre === "(" || pre === "[";
+    return (open ? "" : pre) + keep(open || post ? `<span class="ref-glue">${open ? pre : ""}${chip}${post}</span>` : chip);
+  });
   s = s
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^\w*])\*([^*\s][^*]*)\*(?!\w)/g, "$1<em>$2</em>")
@@ -78,6 +84,8 @@ export function md(src, opts = {}) {
   }
   if (code !== null) out += `<pre><code>${code}</code></pre>`;
   close();
+  // "## Blocked" + "- nothing" reads as one quiet line: "Blocked · nothing".
+  out = out.replace(/<h(\d)>([^<]*)<\/h\1><ul><li class="nothing">([^<]*)<\/li><\/ul>/g, '<h$1 class="nil">$2 <span>· $3</span></h$1>');
   return raw(out);
 }
 

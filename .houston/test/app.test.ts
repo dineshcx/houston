@@ -309,6 +309,13 @@ describe("review", () => {
 });
 
 describe("draft", () => {
+  test("the summary names up to two pages, then counts them", async () => {
+    const { summarize } = await import("../app/api/draft");
+    const ctx = { team: { projects: { a: { name: "A" }, b: { name: "B" } } }, cadences: { daily: { title: "Daily" } } } as never;
+    const pages = (...t: string[]) => t.map((target) => ({ kind: "page", target })) as never;
+    expect(summarize(ctx, pages("a/daily", "b/daily"))).toBe("Update for A · Daily and B · Daily");
+    expect(summarize(ctx, pages("a/daily", "b/daily", "a/weekly"))).toBe("Updates for 3 pages");
+  });
   test("sections come back structured: where each goes, label changes as from → to", async () => {
     const { body } = await get("/api/draft");
     expect(body).toMatchObject({ exists: true, edited: false, held: false, deadline: "2026-11-13 09:45", deadlineAt: "2026-11-13T09:45:00.000Z", text: expect.stringContaining("## Done") });

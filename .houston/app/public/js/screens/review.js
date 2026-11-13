@@ -33,7 +33,7 @@ export function mount(main) {
       html`${bar("Review", html`${freshBadge(d?.fetchedAt, s.loading && !!d)}<button class="icon-btn" data-act="about" title="What is this?" aria-label="What is this screen?">${I.info}</button>`)}
       <div class="content" id="content"><div class="column">
         ${s.error ? errorNotice(s.error) : ""}
-        ${localStorage.reviewLedeSeen ? "" : notice("info", html`<b>Intake pull requests</b> turn a meeting or thread into issue changes. Read the proposed changes, then Merge to approve them: the owner's next run applies them (or anyone runs <code>houston apply</code>). Nothing changes on GitHub until then.`, html`<button class="btn xs ghost" data-act="dismiss-lede">Got it</button>`)}
+        ${localStorage.reviewLedeSeen || !d?.prs?.length ? "" : notice("info", html`<b>Intake pull requests</b> turn a meeting or thread into issue changes. Read the proposed changes, then Merge to approve them: the owner's next run applies them (or anyone runs <code>houston apply</code>). Nothing changes on GitHub until then.`, html`<button class="btn xs ghost" data-act="dismiss-lede">Got it</button>`)}
         ${!d ? skeletonBlock(8) : body(d)}
       </div></div>`,
     );

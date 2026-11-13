@@ -56,6 +56,7 @@ async function doRoute() {
   if (isDown()) return;
   if (current?.name === r.name && current.inst?.update) {
     current.route = r;
+    document.title = `${titleFor(r)} · Houston`;
     await current.inst.update(r);
     drawSidebar();
     return;
@@ -64,10 +65,15 @@ async function doRoute() {
   if (current && !location.hash.startsWith("#/issue/")) closeIssue(); // the panel belongs to the screen it was opened on
   const mod = await SCREENS[r.name]();
   current = { name: r.name, route: r, inst: null };
+  // Each screen draws into its own root: a request the old screen left in flight lands in a detached
+  // element instead of painting over the new screen.
+  const root = document.createElement("div");
+  root.className = "screen";
+  main.replaceChildren(root);
   main._html = null;
   main.scrollTop = 0;
   drawSidebar();
-  current.inst = mod.mount(main, r) ?? {};
+  current.inst = mod.mount(root, r) ?? {};
   document.title = `${titleFor(r)} · Houston`;
 }
 const titleFor = (r) => (r.name === "page" ? `${state.ctx?.projects[r.parts[0]]?.name ?? r.parts[0]} · ${cadenceTitle(r.parts[0], r.parts[1])}` : NAV.find((n) => n[0] === r.name)?.[1] ?? "Setup");

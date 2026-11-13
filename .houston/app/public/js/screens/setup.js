@@ -2,7 +2,7 @@
 // agent ("ask your agent"), so the same checks run. Sections from GET /api/setup, plus "Your laptop"
 // from GET /api/doctor, and the raw `houston explain` text behind a toggle.
 import { get, cached } from "../api.js";
-import { html, setHTML, I, bar, avatar, teamBadge, errorNotice, notice, skeletonBlock, copyCmd, codeText, freshBadge } from "../ui.js";
+import { html, setHTML, I, bar, avatar, teamBadge, errorNotice, notice, skeletonBlock, copyCmd, codeText, freshBadge, plural } from "../ui.js";
 
 const prompts = (d) => [
   `Add a weekly retro cadence for ${d.projects[0]?.name ?? "our project"} on Fridays at 16:00`,
@@ -54,7 +54,7 @@ export function mount(main) {
       <div class="panel">${prompts(d).map((p) => html`<div class="prompt-row">${I.message}<q>${p}</q><button class="btn xs ghost" data-copy="${p}" title="Copy">${I.copy}Copy</button></div>`)}</div>
 
       <h2>${d.team.name}</h2>
-      <p class="lede">${d.team.members.length} members${d.repo ? html` · <a href="https://github.com/${d.repo}" target="_blank" rel="noreferrer">${d.repo}</a>` : ""} · core ${d.core.version}${d.core.wanted && d.core.wanted !== d.core.version ? html` <span class="chip warn">houston.yml wants ${d.core.wanted}</span>` : ""}</p>
+      <p class="lede">${plural(d.team.members.length, "member")}${d.repo ? html` · <a href="https://github.com/${d.repo}" target="_blank" rel="noreferrer">${d.repo}</a>` : ""} · core ${d.core.version}${d.core.wanted && d.core.wanted !== d.core.version ? html` <span class="chip warn">houston.yml wants ${d.core.wanted}</span>` : ""}</p>
       <div class="panel">${d.team.members.map((m) => html`<div class="repo-row">${avatar(m, "lg")}<div class="grow"><div class="name">${m}${d.team.leads.includes(m) ? html`<span class="chip">lead</span>` : ""}${m === d.you.user ? html`<span class="chip">you</span>` : ""}</div></div></div>`)}</div>
 
       <h2>Projects</h2>

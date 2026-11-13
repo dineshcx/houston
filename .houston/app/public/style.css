@@ -281,7 +281,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .nav-meta.bad, .count.bad { color: var(--error-text); }
 .count.warn { color: var(--warning-text); }
 .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--error); flex: none; }
-.side-foot { display: grid; gap: 4px; padding: 8px; border-top: 1px solid var(--border); flex: none; }
+.side-foot { display: grid; gap: 4px; padding: 8px 14px 8px 8px; border-top: 1px solid var(--border); flex: none; } /* right: the nav's scrollbar gutter, so rows line up */
 .side-row { display: flex; align-items: center; gap: 2px; }
 .sync {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px;
@@ -341,7 +341,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 .notice.ok { border-color: color-mix(in srgb, var(--success) 40%, transparent); background: color-mix(in srgb, var(--success) 7%, transparent); }
 .notice.ok > .lucide { color: var(--success-text); }
 .notice pre { margin: 6px 0 0; white-space: pre-wrap; font-size: 12px; }
-.bar + .notice, .main > .notice { margin: 12px 20px 0; }
+.bar + .notice, .screen > .notice { margin: 12px 20px 0; }
+.screen { display: contents; }
 
 .down { display: grid; place-items: center; height: 100%; padding: 24px; }
 .down-card { max-width: 30rem; display: grid; gap: 12px; justify-items: start; }
@@ -370,6 +371,7 @@ button.repo-row { width: 100%; text-align: left; }
 .section-title { display: flex; align-items: baseline; gap: 10px; margin: 32px 0 10px; font-size: 14px; font-weight: 600; }
 .section-title:first-child { margin-top: 0; }
 .section-title .count { font-weight: 400; }
+.section-title + .lede.small { margin: -6px 0 12px; }
 .lede { color: var(--muted-foreground); }
 .lede a, .sub a, .notice a { color: var(--info-foreground); text-decoration: none; }
 .lede a:hover, .sub a:hover, .notice a:hover { text-decoration: underline; }
@@ -515,9 +517,9 @@ button.repo-row { width: 100%; text-align: left; }
 /* ---------- issue chip ---------- */
 
 .issue-ref {
-  display: inline-flex; align-items: center; gap: 5px; max-width: 100%; vertical-align: -4px; margin: 1px 0;
-  padding: 1px 8px 1px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card);
-  font-size: 13px; line-height: 1.5; cursor: pointer; transition: border-color 0.15s; color: var(--foreground); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%; vertical-align: -3px;
+  padding: 0 7px 0 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--card);
+  font-size: 13px; line-height: 18px; cursor: pointer; transition: border-color 0.15s; color: var(--foreground); text-decoration: none;
 }
 .issue-ref:hover { border-color: var(--input); }
 .issue-ref .ref-id { color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
@@ -525,6 +527,11 @@ button.repo-row { width: 100%; text-align: left; }
 .issue-ref.closed .ref-title { color: var(--muted-foreground); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 50%, transparent); }
 .issue-ref.unknown { color: var(--muted-foreground); border-style: dashed; }
 .issue-ref.wide { max-width: 26rem; }
+/* In running text a chip shows enough of the title to recognise it; the full title is in its tooltip. */
+.md .issue-ref .ref-title, .doc-rich .issue-ref .ref-title { max-width: 24em; }
+.ref-glue { display: inline-flex; align-items: baseline; max-width: 100%; white-space: nowrap; }
+.ref-glue > .issue-ref { min-width: 0; vertical-align: 0; align-self: center; }
+.md .nil span { font-weight: 400; color: var(--muted-foreground); }
 .ref-list { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ---------- overlays ---------- */
@@ -650,7 +657,8 @@ button.repo-row { width: 100%; text-align: left; }
 .rollup { border: 1px solid var(--border); border-left: 3px solid var(--error); border-radius: 12px; background: var(--card); padding: 10px 14px 12px; }
 .rollup.clear { border-left-color: var(--success); }
 .rollup h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.rollup ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.rollup ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.rollup li > .md { flex: 1; }
 .rollup li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.5; }
 .rollup li .av { margin-top: 1px; cursor: pointer; }
 .update { border: 1px solid var(--border); border-radius: 12px; background: var(--card); box-shadow: var(--shadow-composer); overflow: hidden; scroll-margin: 12px; transition: box-shadow 2s; }
@@ -726,7 +734,7 @@ button.repo-row { width: 100%; text-align: left; }
 .pr.merged { opacity: 0.55; }
 .pr-sec { padding: 10px 16px 12px; border-bottom: 1px solid var(--border); }
 .pr-sec:last-child { border-bottom: 0; }
-.pr-sec h4 { margin: 0 0 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); display: flex; gap: 8px; align-items: center; }
+.pr-sec h4 { margin: 0 0 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); display: flex; gap: 4px; align-items: center; }
 .change { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
 .change:first-of-type { border-top: 0; }
 .change .kind { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: var(--muted-foreground); }
@@ -761,6 +769,11 @@ button.repo-row { width: 100%; text-align: left; }
 .squares i.published { background: var(--success); box-shadow: none; }
 .squares i.not-reviewed { background: var(--warning); box-shadow: none; }
 .squares i.failed-source { background: var(--error); box-shadow: none; }
+.sq { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--input); }
+.sq.published { background: var(--success); box-shadow: none; }
+.sq.not-reviewed { background: var(--warning); box-shadow: none; }
+.sq.failed-source { background: var(--error); box-shadow: none; }
+.legend + .notice { margin-top: 20px; }
 .person .extra { grid-column: 2 / -1; display: grid; gap: 4px; }
 .person .blocked-line { font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
 .person .blocked-line .lucide { color: var(--error-text); translate: 0 2px; }
@@ -789,18 +802,19 @@ button.repo-row { width: 100%; text-align: left; }
 
 /* ---------- responsive ---------- */
 
-/* 1180–1279: no periods column, narrower updates. Below 1180: updates become a sheet (u). */
-@media (max-width: 1279px) {
+/* Sized by the space the page actually has (the docked issue panel and the sidebar take some), not the
+   window: under 1100px no periods column and narrower updates; under 900px updates become a sheet (u). */
+@container main (max-width: 1099px) {
   .page { grid-template-columns: minmax(0, 1fr) 340px; }
   .periods { display: none; }
 }
-@media (max-width: 1179px) {
+@container main (max-width: 899px) {
   .page { grid-template-columns: minmax(0, 1fr); position: relative; }
-  .updates-col { position: absolute; inset: 0 0 0 auto; width: min(420px, 92%); z-index: 20; box-shadow: var(--shadow-menu); translate: 105% 0; transition: translate 0.2s var(--ease); background: var(--background); visibility: hidden; }
+  .updates-col { position: absolute; inset: 0 0 0 auto; width: min(420px, 92%); z-index: 20; box-shadow: var(--shadow-menu); translate: 105% 0; transition: translate 0.2s var(--ease), visibility 0.2s; background: var(--background); visibility: hidden; }
   .page.show-updates .updates-col { translate: 0 0; visibility: visible; }
   .updates-col .resizer { display: none; }
 }
-@media (min-width: 1180px) { .only-narrow { display: none !important; } }
+@container main (min-width: 900px) { .only-narrow { display: none !important; } }
 @media (max-width: 1100px) {
   .detail { position: fixed; inset: 0 0 0 auto; z-index: 40; max-width: 100vw; box-shadow: var(--shadow-menu); }
   .detail-scrim { display: block; }
