@@ -16,7 +16,7 @@ Everything is in `.houston/`: Bun and TypeScript, no runtime dependencies (only 
 
 | Path | What goes there |
 | --- | --- |
-| `bin/houston` | the entry script: runs `src/cli.ts` with Bun, passing Houston's own empty `bunfig.toml` so a `bunfig.toml` at the repo root can't preload code |
+| `bin/houston` | the entry script: runs `src/cli.ts` with Bun, passing Houston's own empty `bunfig.toml` and `--no-env-file`, so a `bunfig.toml` or `.env` in the folder it runs from can't run code or change its settings |
 | `src/cli.ts` | the command list, in the order `houston help` shows it, and error printing |
 | `src/command.ts` | the `Command` type every command exports |
 | `src/commands/<name>.ts` | one file per command: parse flags, call `lib/`, print plain-word results. Thin. |
