@@ -23,7 +23,7 @@ The `houston` CLI is `.houston/bin/houston`.
 
 2. **Edit.** Make the smallest edit that does it, keeping comments and order in `houston.yml`:
    - A new cadence: copy the closest file from `.houston/presets/*/cadences/` into `cadences/<name>.md`, set its `title`, `schedule` (like `"Mon-Fri 09:30"` or `"Mon 10:00"`, in each person's own timezone), `period` (`day`, `week`, `sprint`, `month`), and for sprints `sprint_start` (the first day of any sprint) and `sprint_length` (`1w`, `2w`, `3w`). Then add its name to the `cadences:` list of each project that uses it.
-   - Changing a cadence: edit its front matter. The body is what each person's section follows; `page:` is what the people's page starts with (only `{{title}}`, `{{period}}` and `{{project}}` may appear).
+   - Changing a cadence: edit its front matter. The body is what each person's section follows; `page:` is what the Notes (`_page.md`) start with (only `{{title}}`, `{{period}}` and `{{project}}` may appear).
    - Dropping a cadence: remove it from the projects' `cadences:` lists; delete the file only if no project uses it. Past pages stay.
    - Repos, people, rules, runs: edit `houston.yml`. A repo belongs to one project. Every lead must also be a member. If a new repo is public, recommend `rules.summary_on_issue: false`.
    - Rules and their values: `status` and `labels` (`auto`, `never`), `create_issue` (`review`: proposed through intake and approved by a person; `never`), `sub_issues` (`auto`, `never`), `issue_comment` (`none`, `blockers_only`, `summary_changes`), `summary_on_issue` (`true`, `false`), `publish_runs` (`auto`, `review`, `review_until_deadline`), `publish_deadline` (like `15m`). `houston validate` refuses anything else.
@@ -34,9 +34,9 @@ The `houston` CLI is `.houston/bin/houston`.
 
 3. **Check.** Run `houston validate`. Fix every problem it lists and run it again. Done when it prints ✓.
 
-4. **Show.** Show `git diff -- houston.yml cadences/`, then the part of `houston explain` that changed, so the person sees the change both as text and in plain words. Done when the person has seen both.
+4. **Show.** Show `git diff -- houston.yml cadences/ templates/ skills/`, then the part of `houston explain` that changed, so the person sees the change both as text and in plain words. Done when the person has seen both.
 
-5. **Commit, after a yes.** Ask "Commit this?". On yes: `git add houston.yml cadences/ && git commit -m "<one line: what changed and why>"`, for example `Move to two-week sprints starting 16 Nov: planning was too frequent`. Then ask whether to push; on yes, `git push`. If they say no, leave the edits uncommitted and say how to undo them (`git checkout -- houston.yml cadences/`).
+5. **Commit, after a yes.** Ask "Commit this?". On yes: `git add houston.yml cadences/ templates/ skills/ && git commit -m "<one line: what changed and why>"`, for example `Move to two-week sprints starting 16 Nov: planning was too frequent`. Then ask whether to push; on yes, `git push`. If they say no, leave the edits uncommitted and say how to undo them (`git checkout -- houston.yml cadences/ templates/ skills/`).
 
    Done when the change is committed (and pushed, if they said so), or the person chose to leave it.
 

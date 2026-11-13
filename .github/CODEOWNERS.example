@@ -1,8 +1,8 @@
 # Who must review changes to the parts of this repo that run on everyone's laptop.
 #
-# Why: every teammate's scheduler runs the code in .houston/ unattended, and runs follow the
-# setup and skills/. Anyone who can push here unreviewed can run code on every teammate's
-# laptop through their runs.
+# Why: every teammate's scheduler runs the code in .houston/ unattended (once they've trusted it
+# with `houston trust`), and runs follow the setup and skills/. Review here means a bad change is
+# caught once, before it reaches anyone, instead of by each person when they trust it.
 #
 # To use it:
 # 1. Rename this file to CODEOWNERS and replace @your-org/leads with your leads (a team or usernames).

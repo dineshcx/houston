@@ -16,13 +16,14 @@ Everything is in `.houston/`: Bun and TypeScript, no runtime dependencies (only 
 
 | Path | What goes there |
 | --- | --- |
-| `bin/houston` | the entry script: `exec bun src/cli.ts "$@"` |
+| `bin/houston` | the entry script: runs `src/cli.ts` with Bun, passing Houston's own empty `bunfig.toml` so a `bunfig.toml` at the repo root can't preload code |
 | `src/cli.ts` | the command list, in the order `houston help` shows it, and error printing |
 | `src/command.ts` | the `Command` type every command exports |
 | `src/commands/<name>.ts` | one file per command: parse flags, call `lib/`, print plain-word results. Thin. |
 | `src/lib/` | the logic, shared by commands and the app: config and its validator (`config.ts`), cadences and dates (`cadence.ts`), GitHub through `gh` (`github.ts`), the issue rules (`issues.ts`), evidence and matching (`evidence.ts`), the draft (`draft.ts`), proposals (`proposals.ts`), setup (`setup.ts`), core trust (`core.ts`), git in the Houston repo (`repo.ts`), state (`state.ts`), paths (`paths.ts`) |
 | `app/server.ts`, `app/public/` | the local app: a JSON API on 127.0.0.1 and three static files |
 | `skills/<name>/SKILL.md` | core skills agents follow: set-me-up, change-setup, intake, run |
+| `templates/issue.md` | the living summary new issues start with (a team's `templates/issue.md` overrides it) |
 | `presets/<name>/` | cadence files a team can start from, with a README each |
 | `docs/` | these docs |
 | `test/<area>.test.ts` | one test file per area |
@@ -30,7 +31,7 @@ Everything is in `.houston/`: Bun and TypeScript, no runtime dependencies (only 
 
 ## The principle: agents decide, the CLI does
 
-Agents (in skills and in runs) decide *what* to say: which issues changed, what the summary says, what a meeting decided. The `houston` CLI does every write and every check: it validates input, enforces the team's rules, touches only the team's repos and the core labels, and never overwrites a person's fresh edit. Unattended runs may only call `houston draft` and `houston issues`.
+Agents (in skills and in runs) decide *what* to say: which issues changed, what the summary says, what a meeting decided. The `houston` CLI does every write and every check: it validates input, enforces the team's rules, touches only the team's repos and the core labels, and never overwrites a person's fresh edit. Unattended runs may only call `houston draft add` (text on stdin) and `houston issues`.
 
 So when you add behaviour:
 
@@ -42,14 +43,17 @@ Other standards: simple, boring, readable code; a short header comment per file 
 
 ## The trust model
 
-Every teammate's scheduler runs `.houston/` unattended. Anyone who can push to a team's Houston repo could otherwise run code on all their laptops. So:
+Every teammate's scheduler runs Houston unattended. Anyone who can push to a team's Houston repo could otherwise run code on all their laptops. So:
 
-- `coreHash()` (`src/lib/core.ts`) hashes every file in `.houston/` except `node_modules/`, `test/` and `.DS_Store`.
-- The person's approved hash is in `.houston-local/state.json` → `trusted_core`. `houston link` approves the core the person set up with.
-- `houston run` refuses to start when the hash differs. The person reviews the change (`git log -p -- .houston`) and runs `houston trust`.
+- `coreHash()` (`src/lib/core.ts`) hashes every file in `.houston/` except `node_modules/`, `test/`, `docs/` and `.DS_Store`, plus the team's `skills/run/SKILL.md` (an unattended run follows it).
+- `houston trust` copies those same files to `.houston-local/core/` (gitignored) and records the hash in `.houston-local/state.json` → `trusted_core`. `houston link` does this the first time.
+- Schedulers and the global block run the copy, `.houston-local/core/bin/houston` (`paths.bin`, what `houston schedule` prints), and a run's agent may only call that copy. So a `git pull`, even one in the middle of a run, can't bring in code that runs before the person has looked at it.
+- `houston run` refuses to start when the repo's hash differs from the trusted one, before and after it pulls. The person reviews the change (`git log -p -- .houston skills/run`) and runs `houston trust`.
+- People typing `.houston/bin/houston` in the repo run the repo's core directly; that's their choice in front of the code.
+- The run's agent is locked down (`startAgent` in `src/commands/run.ts`): an empty working folder, only the Bash tool, only `draft add` and `issues` from the trusted copy, no MCP servers, no user or project settings, and `draft add --file` is refused during a run.
 - `houston update` opens a pull request for review; teams should protect `.houston/`, `houston.yml`, `cadences/` and `skills/` with CODEOWNERS (`.github/CODEOWNERS.example`).
 
-Any change to a file in `.houston/`, docs included, makes every teammate run `houston trust` once after updating.
+Any change to a file in `.houston/` other than docs and tests makes every teammate run `houston trust` once after updating.
 
 ## Running tests and typecheck
 

@@ -19,7 +19,7 @@ export type Cadence = {
   writers: ("runs" | "people")[];
   /** What each person's run writes for a period; shown to the run's agent as the shape to follow. */
   template: string;
-  /** The people's page (_page.md) a new period starts with. Only {{title}}, {{period}} and {{project}} are allowed. */
+  /** The Notes (_page.md) a new period starts with. Only {{title}}, {{period}} and {{project}} are allowed. */
   page: string;
 };
 

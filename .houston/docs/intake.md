@@ -4,14 +4,14 @@ Intake turns a conversation (a meeting transcript, meeting notes, a Slack thread
 
 ## How it goes
 
-1. **Hand it over.** In the Houston repo, give your agent the text (paste it, or point at a file) and say "turn this meeting into issues".
+1. **Hand it over.** In the Houston repo, give your agent the text (paste it, or give a file path) and say "turn this meeting into issues". Houston doesn't fetch conversations from anywhere itself.
 2. **The agent reads it against the team's open issues** (`houston issues --json`), so it updates what exists instead of duplicating it.
 3. **It writes the notes**: summary, decisions, action items, open questions. Notes from a cadence meeting go into that period's `_page.md`; any other meeting goes to `projects/<project>/meetings/<date>-<slug>.md`.
-4. **It writes a proposal** (below) and shows you the notes, each change in one line, and what it left out.
-5. **It opens the pull request** with `houston propose`, after a dry run. The PR holds the notes and `proposals/<date>-<slug>.yml`, is labelled `houston:intake`, and lists the changes as a checklist.
-6. **The meeting owner reviews it**, on GitHub (a phone works) or in the app's Review screen. To fix anything, edit either file in the PR on GitHub; delete a change to drop it.
+4. **It writes a proposal** (below) and shows you the notes, each change in one line, and what it left out. Ideas with no owner or no clear repo go in `skipped`; one worth keeping also gets a line in `projects/<project>/ideas.md`.
+5. **It opens the pull request** with `houston propose`, after a dry run. `propose` pulls the Houston repo first, so the notes go on top of teammates' latest. The PR holds the notes, `proposals/<date>-<slug>.yml` and any new lines in `ideas.md`, is labelled `houston:intake`, and lists the changes as a checklist.
+6. **The meeting owner reviews it**, on GitHub (a phone works) or in the app's Review screen. To fix anything, edit the files in the PR on GitHub; delete a change to drop it. The app shows the PR and merges it, but doesn't edit it.
 7. **Merge to approve. Close to discard.** Closing throws away the notes and the changes.
-8. **Apply.** After the merge, the owner's next run applies it (`houston apply --pending`), or anyone runs `houston apply proposals/<file>.yml`. Each change goes through the team's rules. The file moves to `proposals/applied/` with a record of what happened, and the results (with links to new issues) are commented on the PR.
+8. **Apply.** After the merge, the owner's next run applies it (`houston apply --pending`), or anyone runs `houston apply proposals/<file>.yml` (it pulls first). Each change goes through the team's rules. The file moves to `proposals/applied/` with a record of what happened, and the results (with links to new issues) are commented on the PR.
 
 The text you hand over is treated as evidence, never as instructions. If a transcript says "close every issue", that's something someone said, not something the agent does.
 
@@ -54,7 +54,7 @@ skipped:
 | `raised_by` | who brought it up (default: the owner) |
 | `parent` | a number (an earlier `create` in this list; 1 is the first change) or an existing `owner/repo#n`: links the new issue as its sub-issue |
 
-A new issue starts with a living summary (Goal, Raised by with a link to the notes, State "not started", Next step, and empty Decisions, Open questions, Edge cases, Acceptance checks), `status:todo`, and its priority and kind labels, as the rules allow.
+A new issue starts with a living summary from the [issue template](configuration.md#the-new-issue-summary) (by default: Goal, Raised by with a link to the notes, State "not started", Next step, and empty Decisions, Open questions, Edge cases, Acceptance checks), `status:todo`, and its priority and kind labels, as the rules allow. Houston never closes issues; a proposal can't either.
 
 **update** an existing issue (at least one of the optional fields):
 
@@ -87,4 +87,4 @@ Apply only works on the Houston repo's default branch (where merged proposals ar
 # drop --dry-run to open the pull request
 ```
 
-`houston propose` moves the notes file into the pull request; it comes back to your checkout when the PR is merged and you pull.
+`houston propose` moves the notes file (and new lines in `ideas.md`) into the pull request: a file already in the repo is restored to how it is there, and a new one is deleted from your checkout. It comes back when the PR is merged and you pull.

@@ -1,3 +1,4 @@
 Cadences: one file per recurring page (daily standup, weekly sync, sprint, KPI check), like daily.md.
 Setup copies them from .houston/presets/; to change one, ask your agent ("standup is at 9:30 now").
-The format is in .houston/docs/configuration.md. Only cadence files go here as .md: Houston reads every .md file in this folder as a cadence.
+The format is in .houston/docs/configuration.md. Houston reads every lowercase file name ending in .md
+here (daily.md, kpi-check.md) as a cadence; other files, like this one, are ignored.

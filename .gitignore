@@ -4,3 +4,4 @@ AGENTS.local.md
 .houston-local/
 node_modules/
 .DS_Store
+.playwright-mcp/

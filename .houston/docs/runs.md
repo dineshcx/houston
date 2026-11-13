@@ -2,28 +2,27 @@
 
 A run turns what you did into your updates: your day log, your section of each open cadence page, and the living summaries and status of the issues you touched. It runs on your laptop, started by your own scheduler, every few hours.
 
-```sh
-.houston/bin/houston run
-```
+Your scheduler runs it as `.houston-local/core/bin/houston run`, the copy of Houston you approved (see [Scheduling](#scheduling)). To try one yourself, `.houston/bin/houston run` is fine.
 
 ## What a run does, step by step
 
-1. **Check the core.** If `.houston/` changed since you last approved it, the run stops and asks you to review it and run `houston trust`.
-2. **Pull** the Houston repo, so it has your teammates' latest pages and any merged proposals. If the pull fails, it carries on with what's there.
-3. **Apply your merged intake proposals** (those whose `owner` is you). See [intake.md](intake.md).
-4. **Publish an overdue draft.** If your draft's deadline has passed and you didn't hold it, it publishes now: marked "not reviewed" unless you edited it.
-5. **With `--if-due`**, stop here if the last run was less than `runs.every` ago.
-6. **Wait for you** if your draft is held or you edited it: the run won't replace your work. It says so and stops.
-7. **Make today's pages.** Creates `_page.md` for every cadence period open today, if missing.
-8. **Collect** your evidence since your last published run (or the last 24 hours), and write the digest to `.houston-local/digest.md`.
-9. **Skip if quiet.** If nothing new happened, it records a quiet run and stops without calling a model.
-10. **Draft.** Starts Claude Code headless (`claude -p`, model `runs.model`, at most `runs.max_turns` turns, 10 minutes at most) with the run skill, this run's facts, the current content of your files, and the digest. The agent may only run `houston draft …`, `houston issues …` and read files. It writes your draft section by section with `houston draft add`; each section is checked as it's added.
-11. **Publish or wait**, per `rules.publish_runs`:
+1. **Check the core.** If `.houston/` or the team's `skills/run/SKILL.md` changed since you last trusted it, the run stops and asks you to review the change and run `houston trust`.
+2. **One at a time.** If another run (or a `houston publish`) is going on this laptop, it leaves it to finish and stops.
+3. **Pull** the Houston repo, so it has your teammates' latest pages and any merged proposals. If the pull fails, it carries on with what's there. If the pull brought a core change, it stops as in step 1.
+4. **Apply your merged intake proposals** (those whose `owner` is you). See [intake.md](intake.md).
+5. **Publish an overdue draft.** If your draft's deadline has passed and you didn't hold it, it publishes now: marked "not reviewed" unless you edited it. If publishing fails (say a section names a frozen period), the draft is held, the run records why, and you get a notification saying what to fix.
+6. **With `--if-due`**, stop here if the last run was less than `runs.every` ago.
+7. **Wait for you** if your draft is held or you edited it: the run won't replace your work. It says so and stops.
+8. **Make today's pages.** Creates `_page.md` (the Notes) for every cadence period open today, if missing.
+9. **Collect** your evidence since your last published run (or the last 24 hours), and write the digest to `.houston-local/digest.md`.
+10. **Skip if quiet.** If nothing new happened, it records a quiet run and stops without calling a model.
+11. **Draft.** Starts Claude Code headless (`claude -p`, model `runs.model`, at most `runs.max_turns` turns, 10 minutes at most) with the run skill, this run's facts, the current content of your files, and the digest. It's locked down: it runs in an empty temporary folder, its only tool is the shell, and the only commands allowed are the trusted copy's `houston draft add` (text on stdin, not `--file`) and `houston issues`. It can't read files, has no MCP servers, and none of your user or project Claude Code settings (allow rules, hooks) apply. Each section is checked as it's added.
+12. **Publish or wait**, per `rules.publish_runs`:
     - `auto`: publishes now.
     - `review`: waits until you run `houston publish`.
     - `review_until_deadline` (default): you get a notification ("Your Houston draft is ready to review.") and the draft publishes on its own `publish_deadline` before your next cadence.
 
-If the agent fails, the draft is thrown away and nothing is recorded, so the next run covers the same time again. Extra runs are safe: each only adds what's new.
+If the agent fails, the draft is thrown away and the run is recorded as failed; the next run covers the same time again. Extra runs are safe: each only adds what's new.
 
 ## What a run reads
 
@@ -77,17 +76,27 @@ Houston doesn't install schedules. You put one instruction in any scheduler you 
 houston schedule
 ```
 
-prints the instruction (`cd <houston repo> && <houston repo>/.houston/bin/houston run`), suggested times (about an hour before each cadence, at each publish deadline, and every `runs.every` from 09:00 to 18:00), a crontab example (with the `PATH` cron needs) and a sentence for an agent app. Once it's set up, record it so `houston doctor` can check it:
+prints the instruction, suggested times (about an hour before each cadence, at each publish deadline, and every `runs.every` from 09:00 to 18:00), a crontab example (with the `PATH` cron needs) and a sentence for an agent app. The instruction is
+
+```sh
+cd <houston repo> && <houston repo>/.houston-local/core/bin/houston run
+```
+
+It runs your trusted copy, not `.houston/bin/houston`: a change someone pushes to `.houston/` can't run on your laptop until you've reviewed it and run `houston trust` (see [concepts.md](concepts.md#the-trusted-core)). Use the instruction exactly as printed.
+
+Once it's set up, record it so `houston doctor` can check it:
 
 ```sh
 houston schedule --set "crontab, Mon–Fri 09:00, 09:45, 12:00, 15:00, 18:00"
 ```
 
-Improving how runs work never means editing your scheduler: the instruction stays `houston run`, and the real instructions live in the run skill in this repo.
+Improving how runs work never means editing your scheduler: the instruction stays `houston run`, and the real instructions live in the run skill.
 
 ## Catching up
 
-`houston link` writes a block into `~/.claude/CLAUDE.md`. When you open Claude Code in a linked repo, the block tells it to run `houston run --if-due --quiet` in the background. A laptop that was shut at 09:30 catches up minutes after you start working, and an overdue draft publishes. The same block tells your agent to leave a line in `.houston-inbox.md` when it finishes something, makes a decision or gets blocked.
+`houston link` writes a block into `~/.claude/CLAUDE.md` listing the Houston repos linked on this laptop (one block serves several teams). When you open Claude Code in a code repo whose `.houston` file points at one of those Houston repos, the block tells it to run `<houston repo>/.houston-local/core/bin/houston run --if-due --quiet` in the background. A `.houston` file pointing anywhere else is ignored, since anyone can commit one to a repo. A laptop that was shut at 09:30 catches up minutes after you start working, and an overdue draft publishes. The same block tells your agent to leave a line in `.houston-inbox.md` when it finishes something, makes a decision or gets blocked.
+
+`houston link --no-global` leaves `~/.claude/CLAUDE.md` alone (doctor then warns that catch-up won't happen); `houston link --remove` takes only this Houston repo out of the block.
 
 ## When a run goes wrong
 
@@ -97,4 +106,4 @@ Start with:
 houston doctor
 ```
 
-It checks your tools, sign-in, setup, links, core trust, the last run's outcome and any waiting draft, with a fix for each problem. Then run `houston run` yourself to see its message, and `houston collect` to see exactly what it read. Common cases are in [troubleshooting.md](troubleshooting.md).
+It checks your tools, sign-in, setup, links, the global block, core trust, the last run's outcome and any waiting draft, with a fix for each problem. Then run `houston run` yourself to see its message, and `houston collect` to see exactly what it read. Common cases are in [troubleshooting.md](troubleshooting.md).

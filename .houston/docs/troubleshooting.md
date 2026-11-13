@@ -13,15 +13,18 @@ Houston talks to GitHub through the GitHub CLI. Run `gh auth login`, then `houst
 ## The run says the core changed
 
 ```
-houston: Houston's core (.houston/) changed since you last approved it, so it won't run unattended.
+houston: Houston's core changed since you approved it (it's version 0.2.0 now), so it won't run unattended. Review the change with …, then run `houston trust`.
 ```
 
-Someone updated `.houston/` (usually a merged `houston update`) and you pulled it. Runs only use a core you approved, because the code in it runs on your laptop. Look at what changed, then approve it:
+Someone changed `.houston/` (usually a merged `houston update`) or the team's `skills/run/SKILL.md`, and you pulled it. Runs only use the copy of the core you approved (`.houston-local/core/`), because the code in it runs on your laptop. Look at what changed, then approve it:
 
 ```sh
-git log -p -- .houston
+git log -p -- .houston skills/run
+git diff -- .houston skills/run       # uncommitted changes
 .houston/bin/houston trust
 ```
+
+If your scheduler runs `.houston/bin/houston run` (an older setup), change it to the instruction `houston schedule` prints, which runs the trusted copy.
 
 If doctor also says `core X doesn't match core: Y in houston.yml`, pull the Houston repo (a teammate updated it) or run `houston update`.
 
@@ -93,7 +96,7 @@ Houston never writes a summary over a person's fresh edit. The rest of the draft
 
 ## Label not found
 
-If a run or `houston labels` fails because `status:in-progress` (or `p1`, `kind:bug`) doesn't exist in a repo, create Houston's labels in every team repo once:
+Houston creates a missing label the first time it sets it in a repo. If that fails (usually no permission to create labels there), ask someone with write access to the repo to create Houston's labels in every team repo:
 
 ```sh
 .houston/bin/houston labels sync
@@ -107,3 +110,13 @@ Run it again after adding a repo to `houston.yml`.
 - Cron starts jobs with a bare `PATH`; if `bun`, `claude`, `gh` or `git` aren't found, use the crontab line `houston schedule` prints, which sets `PATH`.
 - The scheduler must run on your laptop. A cloud task has none of your repos or sessions.
 - "The run's agent failed": the message says why (often Claude Code not signed in). Nothing was drafted; the next run covers the same time again.
+- "Another Houston run is in progress": a run (or `houston publish`) was already going on this laptop. That's normal when runs overlap; the next one carries on.
+- "Couldn't publish your draft": a draft reached its deadline but failed a check (a frozen period, a label Houston doesn't manage). It's held now so runs don't fail the same way; fix it with `houston draft` or throw it away with `houston draft discard`.
+
+## Doctor warns about the Houston block
+
+```
+! no Houston block in ~/.claude/CLAUDE.md, so your agent won't catch up missed runs here
+```
+
+Run `houston link` to add this Houston repo to the block. If you linked with `--no-global` on purpose, ignore it: your runs still work; only catch-up and inbox notes from your agent need the block.

@@ -14,7 +14,7 @@ How Houston's pieces fit together. For one-line definitions, see [GLOSSARY.md](.
 
 **Source.** Where evidence of work comes from. Runs read GitHub activity, each linked repo's local git work, the inbox file in each linked repo, and Claude Code sessions in those repos. Conversations (transcripts, Slack threads, email) come in through intake.
 
-**Rule.** What agents may do to issues without asking: move status, set labels, create issues, comment, keep summaries. Set in `houston.yml` → `rules`, enforced by the CLI.
+**Rule.** What agents may do to issues without asking: move status, set labels, propose issues, link sub-issues, comment, keep summaries. Set in `houston.yml` → `rules`, enforced by the CLI. Houston never closes issues; people do.
 
 ## Where everything lives
 
@@ -23,14 +23,17 @@ How Houston's pieces fit together. For one-line definitions, see [GLOSSARY.md](.
 | Team setup | `houston.yml`, `cadences/` in the Houston repo | people (usually by asking their agent) |
 | Issues | the code repos on GitHub | people, runs, intake (through the CLI) |
 | Living summaries | top of each issue's body, between markers | runs, intake, `houston summary --set` |
-| Cadence pages | `projects/<project>/<cadence>/<period>/` | `_page.md`: people; `<user>.md`: that user's runs |
+| Cadence pages | `projects/<project>/<cadence>/<period>/` | `_page.md` (the **Notes**): people; `<user>.md` (that person's **Update**): that user's runs |
 | Day logs | `people/<user>/<YYYY-MM-DD>.md` | that user's runs |
 | Meeting notes | the period's `_page.md`, or `projects/<project>/meetings/` | intake |
+| Ideas with no repo yet | `projects/<project>/ideas.md`, one per line | intake |
 | Intake proposals | `proposals/`, then `proposals/applied/` | `houston propose`, `houston apply` |
 | Team skills | `skills/<name>/SKILL.md` | people |
+| New-issue summary (optional) | `templates/issue.md`, overriding `.houston/templates/issue.md` | people |
 | Houston itself | `.houston/` | `houston update` |
 | Your settings | `houston.local.yml` (gitignored) | `houston link` |
 | Your draft and run state | `.houston-local/` (gitignored) | `houston run`, `houston draft` |
+| Your approved copy of the core | `.houston-local/core/` (gitignored) | `houston trust` |
 | Repo pointer and inbox | `.houston`, `.houston-inbox.md` in each code repo, hidden by `.git/info/exclude` | `houston link`; your agent appends to the inbox |
 
 Nothing is ever committed to a code repo.
@@ -62,11 +65,11 @@ The original issue description, as people wrote it.
 - Text outside the markers is never touched.
 - If someone else edited the issue body in the last 10 minutes, Houston leaves the summary alone rather than overwrite them.
 - `rules.summary_on_issue: false` turns summaries off (recommended for public repos, since summaries describe private work).
-- Shapes for a new issue and a bug are in `templates/issue.md` and `templates/bug.md`.
+- A new issue's summary comes from `templates/issue.md` if the team has one, otherwise `.houston/templates/issue.md`. It may use only `{{goal}}`, `{{raised_by}}` and `{{next_step}}`.
 
 ## One file per writer
 
-Each file in the Houston repo has one kind of writer. Ana's runs write only `ana.md` and `people/ana/…`; people write `_page.md`. So runs from ten laptops push to the same repo all day and never conflict. If a push is refused because someone pushed first, Houston pulls and pushes again.
+Each file in the Houston repo has one kind of writer. Ana's runs write only her Update (`ana.md`) and `people/ana/…`; people write the Notes (`_page.md`). So runs from ten laptops push to the same repo all day and never conflict. If a push is refused because someone pushed first, Houston pulls and pushes again.
 
 ## Frozen periods
 
@@ -102,3 +105,9 @@ Each `<!-- houston:… -->` line starts a section; edit the text under it, or de
 - If you edited it, it still publishes at the deadline (without "not reviewed"), and later runs don't replace your edits. Only a held draft waits past the deadline.
 
 See [runs.md](runs.md) for the whole run.
+
+## The trusted core
+
+Every teammate's runs execute Houston's code unattended, so anyone who can push to the Houston repo could otherwise run code on all their laptops. Instead, each person approves the core with `houston trust`, which copies `.houston/` to `.houston-local/core/` (gitignored, one per laptop). Schedulers and agents run that copy, `.houston-local/core/bin/houston`, which is what `houston schedule` prints.
+
+When a pull brings a change to `.houston/` or to the team's `skills/run/SKILL.md`, runs stop and say so until the person reviews it (`git log -p -- .houston skills/run`, and `git diff -- .houston skills/run` for uncommitted changes) and runs `houston trust` again. Typing `.houston/bin/houston` yourself in the repo is fine: you're there to see what it does.

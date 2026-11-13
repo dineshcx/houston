@@ -1,4 +1,4 @@
-// houston page: make sure a cadence period's folder and people's page (_page.md) exist.
+// houston page: make sure a cadence period's folder and Notes (_page.md) exist.
 import { parseArgs } from "node:util";
 import type { Command } from "../command";
 import { cadenceOf, isDate, periodOf, zoned } from "../lib/cadence";

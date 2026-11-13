@@ -14,6 +14,6 @@ Agents always ask `houston skill <name>` which file to follow, so nothing else n
 
 To make Claude Code offer a new skill by name, also add a stub in `.claude/skills/<name>/SKILL.md` like the existing ones.
 
-A team version of `run` is used by every teammate's unattended runs. Review changes to `skills/` as carefully as code (see `.github/CODEOWNERS.example`).
+A team version of `run` is used by every teammate's unattended runs, so it's covered by `houston trust` like `.houston/`: after it changes, each person's runs stop until they review it (`git log -p -- skills/run`) and run `houston trust`. Review changes to `skills/` as carefully as code (see `.github/CODEOWNERS.example`).
 
 When `houston update` brings a newer core skill, compare it with your copy and merge what you want; your copy isn't changed.

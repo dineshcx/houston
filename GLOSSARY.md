@@ -12,7 +12,7 @@ The words Houston uses, in one place. Docs, skills and the CLI all use them this
 
 **Period.** One stretch of a cadence: a day, a week, a sprint or a month. Its folder is named by its first day, like `projects/storefront/daily/2026-11-13/`. A period is **frozen** once the next one has started: its files don't change after that.
 
-**Page.** Everything in one period's folder: `_page.md` (the team's notes, written by people) and one file per person (`ana.md`, written only by Ana's runs).
+**Page.** Everything in one period's folder: the **Notes** (`_page.md`, written by people: agenda, decisions, action items) and one **Update** per person (`ana.md`, written only by Ana's runs).
 
 **Day log.** One person's record of a day: `people/<user>/<YYYY-MM-DD>.md`, written by their runs. Not tied to any project.
 
@@ -24,12 +24,16 @@ The words Houston uses, in one place. Docs, skills and the CLI all use them this
 
 **Inbox.** `.houston-inbox.md` in each linked code repo: one line per note an agent leaves while working (`- 14:05 fixed the retry bug (acme/web#12)`). Hidden from git. The next published run uses the lines and removes them. Not to be confused with intake.
 
-**Intake.** Turning a conversation (meeting transcript, Slack thread, email) into notes and issue changes, opened as one pull request in the Houston repo. Say "turn this meeting into issues" to your agent.
+**Intake.** Turning a conversation (meeting transcript, Slack thread, email, as a file or pasted text) into notes and issue changes, opened as one pull request in the Houston repo. Say "turn this meeting into issues" to your agent. Ideas with no repo yet go one per line in `projects/<project>/ideas.md`, in the same pull request.
 
 **Proposal.** The issue changes intake suggests, as a file: `proposals/<date>-<slug>.yml`. Merging the intake pull request approves it; `houston apply` then makes the changes. Closing the pull request throws it away.
 
-**Rules.** What agents may do to issues without asking (`rules:` in `houston.yml`): change status, create issues, comment, and so on. The CLI enforces them; an agent can't skip them.
+**Rules.** What agents may do to issues without asking (`rules:` in `houston.yml`): change status, propose issues, comment, and so on. The CLI enforces them; an agent can't skip them. Houston never closes issues; people do.
 
 **Core.** The `.houston/` folder: the CLI, the app, the core skills, presets and docs. Every team runs the same core; `houston update` replaces it. Teams don't edit it.
+
+**Trusted core.** The copy of the core each person approved with `houston trust`, in `.houston-local/core/` (gitignored, one per laptop). Schedulers and agents run its `bin/houston`, so a change pulled from a teammate (to `.houston/` or `skills/run/SKILL.md`) doesn't run until the person reviews it and trusts it again.
+
+**Global block.** The Houston section `houston link` writes in `~/.claude/CLAUDE.md`. It lists the Houston repos linked on this laptop, and tells the agent, in a code repo whose `.houston` file points at one of them, to catch up on missed runs and keep inbox notes.
 
 **Preset.** A ready-made set of cadence files in `.houston/presets/` (daily standup, weekly sync, sprints with KPIs). Setup copies the ones a team picks into `cadences/`.

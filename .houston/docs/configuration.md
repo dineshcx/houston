@@ -1,6 +1,6 @@
 # Configuration
 
-Everything a team configures is in two places in the Houston repo: `houston.yml` and `cadences/`. Each person also has `houston.local.yml`. The easiest way to change any of them is to ask your agent in the Houston repo ("standup is at 9:30 now"); it edits, validates and shows you the change.
+Everything a team configures is in two places in the Houston repo: `houston.yml` and `cadences/` (plus, optionally, [`templates/issue.md`](#the-new-issue-summary)). Each person also has `houston.local.yml`. The easiest way to change any of them is to ask your agent in the Houston repo ("standup is at 9:30 now"); it edits, validates and shows you the change.
 
 After editing by hand, run:
 
@@ -34,11 +34,9 @@ status:
     - { label: in-review, name: Review }
     - { label: blocked, name: Blocked }
 priority: { p0: Urgent, p1: High, p2: Medium, p3: Low }
-sources:
-  github: { kind: github }
 rules:
   create_issue: review
-  close_issue: never
+  sub_issues: auto
   publish_runs: review_until_deadline
   publish_deadline: 15m
 runs: { every: 3h, model: haiku, max_turns: 12 }
@@ -80,7 +78,7 @@ A map from project id to project. At least one project.
 
 The status labels themselves are fixed (`status:todo`, `status:in-progress`, …) and the same in every repo, so two teams sharing a repo never fight. Teams only choose which columns to show and what to call them. An issue has one status at a time. `ready-for-agent` is reserved for later.
 
-Run `houston labels sync` once (and again after adding a repo) to create the status, priority and kind labels in every team repo.
+Run `houston labels sync` once ("set me up" does it for the first person, and again after adding a repo) to create the status, priority and kind labels in every team repo. A missing label is also created the first time Houston sets it in a repo.
 
 ### priority
 
@@ -93,19 +91,6 @@ Run `houston labels sync` once (and again after adding a repo) to create the sta
 
 The labels are always `p0`…`p3`; this sets their names. Issue kinds are fixed too: `kind:bug`, `kind:feature`, `kind:task`, `kind:investigation`.
 
-### sources
-
-A map from a name you choose to a source. Default: `{ github: { kind: github } }`.
-
-| Key | Allowed values |
-| --- | --- |
-| `kind` | `github`, `transcript`, `slack`, `email` |
-| `channel` | required when `kind: slack`, like `"#bugs"` |
-| `trigger` | `reaction` (only threads someone reacts to) or `all` |
-| `emoji` | the reaction that flags a thread, for `trigger: reaction` |
-
-Today, runs read GitHub activity, local git work, the inbox and Claude Code sessions whatever this says. Transcripts, Slack threads and email reach Houston through [intake](intake.md): you hand the text to your agent. The other kinds describe where the team's conversations come from and show in `houston explain`.
-
 ### rules
 
 What agents may do to issues without asking. Defaults in the table; see [Rules one by one](#rules-one-by-one).
@@ -114,14 +99,14 @@ What agents may do to issues without asking. Defaults in the table; see [Rules o
 | --- | --- | --- |
 | `status` | `auto` | `auto`, `never` |
 | `labels` | `auto` | `auto`, `never` |
-| `assign_self` | `auto` | `auto`, `never` |
-| `create_issue` | `review` | `auto`, `review`, `never` |
-| `sub_issues` | `with_owner` | `auto`, `with_owner`, `never` |
-| `close_issue` | `never` | `auto`, `never` |
+| `create_issue` | `review` | `review`, `never` |
+| `sub_issues` | `auto` | `auto`, `never` |
 | `issue_comment` | `blockers_only` | `none`, `blockers_only`, `summary_changes` |
 | `summary_on_issue` | `true` | `true`, `false` |
 | `publish_runs` | `review_until_deadline` | `auto`, `review`, `review_until_deadline` |
 | `publish_deadline` | `15m` | a duration |
+
+Houston never closes issues; people do. There's no rule for it.
 
 ### runs
 
@@ -143,10 +128,8 @@ What agents may do to issues without asking. Defaults in the table; see [Rules o
 
 - **`status`**: `auto` lets runs and intake move issues between status columns (`status:in-progress` when you're clearly working on it, `status:in-review` for an open PR, `status:blocked`). `never` leaves status to people; the CLI refuses any status change.
 - **`labels`**: `auto` lets agents set priority (`p0`–`p3`) and kind (`kind:bug`, …) labels. `never` refuses them. Houston only ever touches these and the status labels; every other label belongs to people.
-- **`assign_self`**: whether an agent may assign an issue to the person it's working for. Shown by `houston explain`; no command assigns issues on its own yet (intake can name an `assignee` for an issue it creates).
-- **`create_issue`**: `review` means new issues are proposed in an intake pull request and created after it's merged. `never` makes intake refuse to propose any. Runs never create issues.
-- **`sub_issues`**: how new issues are linked under a parent. With `never`, an intake proposal's `parent:` is recorded but the issue isn't linked.
-- **`close_issue`**: whether agents may close issues. No Houston command closes issues; keep it `never`.
+- **`create_issue`**: `review` means new issues are proposed in an intake pull request and created after a person merges it. `never` makes intake refuse to propose any. Runs never create issues.
+- **`sub_issues`**: `auto` links a new issue under its parent (an intake proposal's `parent:`) as a GitHub sub-issue, so work spanning repos gets one main issue. With `never`, the issue is created without the link.
 - **`issue_comment`**: `none` means no comments at all; `blockers_only` lets runs comment only to say what blocks an issue; `summary_changes` lets them add a short note when a summary changed.
 - **`summary_on_issue`**: `true` keeps a living summary at the top of each issue. Set `false` for public repos: summaries describe the team's private work.
 - **`publish_runs`**: what happens to a run's draft. `auto` publishes right away. `review` waits until the person approves. `review_until_deadline` waits, then publishes on its own `publish_deadline` before the person's next cadence, marked "not reviewed".
@@ -154,7 +137,7 @@ What agents may do to issues without asking. Defaults in the table; see [Rules o
 
 ## Cadence files
 
-One file per cadence: `cadences/<name>.md`. The name (without `.md`) is what projects list in `cadences:`. Every `.md` file in `cadences/` is read as a cadence, so keep other files out of it.
+One file per cadence: `cadences/<name>.md`. The name (without `.md`) is what projects list in `cadences:`. Every `.md` file in `cadences/` with a lowercase name (like `daily.md`) is read as a cadence, so keep other files out of it.
 
 ```markdown
 ---
@@ -194,7 +177,7 @@ The front matter says when and how long; the **body** is the shape each person's
 | `sprint_start` | required for sprints | `YYYY-MM-DD`, the first day of any sprint |
 | `sprint_length` | `2w` | a duration, like `1w`, `2w`, `3w` |
 | `writers` | `[runs, people]` | a list of `runs` and/or `people`. Without `runs`, runs don't write sections for this cadence. |
-| `page` | Agenda, Notes, Decisions, Action items | the `_page.md` each new period starts with |
+| `page` | Agenda, Notes, Decisions, Action items | the Notes (`_page.md`) each new period starts with |
 
 ### Schedule
 
@@ -225,13 +208,17 @@ A period is frozen once the next one has started.
 
 ### The page template
 
-`page:` is the text a new period's `_page.md` starts with (created by runs, `houston page`, or the app). It may use three variables:
+`page:` is the text a new period's Notes (`_page.md`) start with (created by runs, `houston page`, or the app). It may use three variables:
 
 - `{{title}}`: the cadence's title
 - `{{period}}`: the period's first day, like `2026-11-13`
 - `{{project}}`: the project id, like `storefront`
 
 Any other `{{…}}` is refused by `houston validate`.
+
+## The new-issue summary
+
+Every issue Houston creates starts with a living summary from `.houston/templates/issue.md`. To change it, copy that file to `templates/issue.md` in the Houston repo and edit it; the team's file wins. Only the block between `<!-- houston:summary -->` and `<!-- /houston:summary -->` is used, and it may use only `{{goal}}`, `{{raised_by}}` and `{{next_step}}`. `houston validate` checks it. There is one template for every kind of issue.
 
 ## houston.local.yml
 

@@ -1,5 +1,5 @@
 // The person's files in the Houston repo: day logs, their section of each cadence period, the
-// period's people's page, and the run footer under each section. Every write here goes through
+// period's Notes (_page.md), and the run footer under each section. Every write here goes through
 // writeInRepo, which never follows a symlink or leaves the repo.
 import { existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -80,7 +80,7 @@ export function openPeriods(ctx: Context, projects: string[], at: Date): { proje
   );
 }
 
-/** Makes sure a period's folder and its people's page exist. Returns the file if it was created. */
+/** Makes sure a period's folder and its Notes (_page.md) exist. Returns the file if it was created. */
 export function ensurePage(project: string, c: Cadence, period: string): string | undefined {
   const file = join(paths.root, periodDir(project, c.name, period), "_page.md");
   if (existsSync(file)) return undefined;

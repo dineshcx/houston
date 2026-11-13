@@ -36,19 +36,16 @@ You need [git](https://git-scm.com), the [GitHub CLI](https://cli.github.com) (`
    cd ~/code/web-team-houston
    claude
    ```
-3. Say **"set me up"**. Answer its questions. It writes `houston.yml` and your cadences, links your repos on this laptop, and shows you what to put in your scheduler.
-4. Push when it asks. Then create Houston's status, priority and kind labels in your code repos, once:
-   ```sh
-   .houston/bin/houston labels sync
-   ```
+3. Say **"set me up"**. Answer its questions. It writes and commits `houston.yml` and your cadences, creates Houston's status, priority and kind labels in your code repos (`houston labels sync`), links your repos on this laptop, and shows you what to put in your scheduler. Push when it asks: teammates clone what you push.
+4. Put the instruction it shows in a scheduler on this laptop, at the times it suggests. It runs `.houston-local/core/bin/houston run`, your approved copy of Houston (see [Updating Houston](#updating-houston)).
 5. Send the repo link to your team.
 
 **Member:**
 
 1. Clone the team's Houston repo and open Claude Code in it.
-2. Say **"set me up"**.
+2. Say **"set me up"**, then put the instruction it shows in your scheduler.
 
-Saying "set me up" again is always safe. It fixes what's missing and changes nothing else.
+Saying "set me up" again is always safe. It fixes what's missing and changes nothing else. Not sure where you are? `.houston/bin/houston doctor` checks everything and says what to do next.
 
 ## What lives where
 
@@ -58,16 +55,18 @@ web-team-houston/                  the Houston repo (one per team)
 ├── cadences/                      one file per recurring page: daily.md, sprint.md
 ├── projects/storefront/
 │   ├── daily/2026-11-13/
-│   │   ├── _page.md               the team's notes for that day
-│   │   ├── ana.md                 Ana's update, written by her runs
-│   │   └── raj.md                 Raj's update, written by his runs
-│   └── meetings/                  notes from other meetings
+│   │   ├── _page.md               the day's Notes, written by people
+│   │   ├── ana.md                 Ana's Update, written by her runs
+│   │   └── raj.md                 Raj's Update, written by his runs
+│   ├── meetings/                  notes from other meetings
+│   └── ideas.md                   ideas from meetings with no repo yet
 ├── people/ana/2026-11-13.md       Ana's day log
 ├── proposals/                     intake proposals waiting to be applied
 ├── skills/                        your team's own versions of Houston's skills
-├── templates/                     living summary shapes (issue, bug)
+├── templates/                     optional: your own summary for new issues
 ├── .houston/                      Houston itself: CLI, app, skills, docs
-└── houston.local.yml              yours only, not committed
+├── houston.local.yml              yours only, not committed
+└── .houston-local/                yours only: your draft, run state, your approved copy of Houston
 ```
 
 **Issues stay in your code repos** (`acme/web`, `acme/api`). Houston updates their summaries and labels, but **nothing is ever committed to a code repo**. The two small files it keeps there (`.houston` and `.houston-inbox.md`) are hidden from git through `.git/info/exclude`.
@@ -84,9 +83,9 @@ web-team-houston/                  the Houston repo (one per team)
 
 The draft is a plain file, `.houston-local/draft.md`. Edit it, then publish. Later runs never overwrite a draft you edited; only a held draft waits past its deadline.
 
-**The app.** `.houston/bin/houston app` opens a local page (on `127.0.0.1:4317`) with today's cadence page, a board of the team's issues, intake pull requests to review, your draft, and who has run lately. See [app.md](.houston/docs/app.md).
+**The app.** `.houston/bin/houston app` opens a local page (on `127.0.0.1:4317`) with each cadence page (the team's Notes and everyone's Update), a board of the team's issues, intake pull requests to review and merge, your draft, and who has run lately. See [app.md](.houston/docs/app.md).
 
-**Intake.** Give your agent a transcript, notes, a Slack thread or an email in the Houston repo and say **"turn this meeting into issues"**. It writes the notes and opens one pull request with the proposed changes. Merge it to apply them; close it to throw them away. See [intake.md](.houston/docs/intake.md).
+**Intake.** In the Houston repo, give your agent a transcript, notes, a Slack thread or an email (a file path, or paste it) and say **"turn this meeting into issues"**. It writes the notes and opens one pull request with the proposed changes. Fix anything on GitHub, then merge it to apply them; close it to throw them away. See [intake.md](.houston/docs/intake.md).
 
 **Your agent keeps notes.** While you work in a linked code repo, your agent adds a line to `.houston-inbox.md` when it finishes something, makes a decision or gets blocked. Your next run uses those lines.
 
@@ -108,7 +107,16 @@ It edits `houston.yml` or `cadences/`, runs `houston validate`, shows you the ch
 .houston/bin/houston update
 ```
 
-It opens a pull request that replaces `.houston/` with the newer version (from `template:` in `houston.yml`). Your setup, notes and own skills are untouched. After it's merged, each person pulls and runs `houston trust` once: runs won't use a changed core until its owner has approved it.
+It opens a pull request against your default branch that replaces `.houston/` with the newer version (from `template:` in `houston.yml`). Your setup, notes and own skills are untouched.
+
+Schedulers and agents never run `.houston/` straight from the repo. They run `.houston-local/core/`, a copy each person approves with `houston trust` (gitignored, one per laptop), so a change pulled from a teammate can't run on your laptop until you've looked at it. After pulling a change to `.houston/` (or to your team's `skills/run/SKILL.md`), your runs stop and say so. Review it, then trust it:
+
+```sh
+git log -p -- .houston skills/run      # and git diff -- .houston skills/run for uncommitted changes
+.houston/bin/houston trust
+```
+
+Typing `.houston/bin/houston` yourself, in the repo, is fine.
 
 ## Docs
 
