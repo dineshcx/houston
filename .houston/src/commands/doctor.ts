@@ -1,10 +1,111 @@
+// houston doctor: one line per check, with a fix for each problem. Exit 1 if anything failed.
+// Checks that need GitHub turn into warnings when it can't be reached, so a laptop on a train
+// isn't told its setup is broken.
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Command } from "../command";
-import { HoustonError } from "../lib/util";
+import { loadLocal, loadTeam, teamRepos, type Local, type Team } from "../lib/config";
+import { isTrusted } from "../lib/core";
+import { github } from "../lib/github";
+import { coreVersion, IN_CODE_REPO, paths } from "../lib/paths";
+import { BLOCK_BEGIN, excludeFile, globalFile, originOf } from "../lib/setup";
+import { readState } from "../lib/state";
+import { parseDuration, sh } from "../lib/util";
+import { problems } from "./validate";
+
+type Mark = "ok" | "fail" | "warn";
+const lines: { mark: Mark; text: string; fix?: string }[] = [];
+const check = (mark: Mark, text: string, fix?: string) => lines.push({ mark, text, fix });
+const ago = (ms: number) => (ms < 3_600_000 ? `${Math.round(ms / 60_000)}m` : `${Math.round(ms / 3_600_000)}h`);
+
+function tools() {
+  check(sh(["git", "--version"]).ok ? "ok" : "fail", "git", "Install git: https://git-scm.com");
+  check(Bun.which("bun") ? "ok" : "fail", "bun on PATH", "Install Bun (https://bun.sh) so schedulers can start `houston run`.");
+  check(Bun.which("claude") ? "ok" : "fail", "claude on PATH", "Install Claude Code (https://claude.com/claude-code); runs start it headless.");
+}
+
+/** The signed-in GitHub user, or undefined when GitHub can't be reached. */
+function login(): string | undefined {
+  if (!process.env.HOUSTON_FAKE_GITHUB && !Bun.which("gh")) return check("fail", "gh installed", "Install the GitHub CLI: https://cli.github.com"), undefined;
+  try {
+    const me = github().login();
+    check("ok", `gh signed in as ${me}`);
+    return me;
+  } catch {
+    // `gh auth token` reads the local login without the network, so it tells offline from signed out.
+    if (sh(["gh", "auth", "token"]).ok) check("warn", "couldn't reach GitHub; checks that need it are skipped", "Try again when you're online.");
+    else check("fail", "gh signed in", "Run `gh auth login`.");
+  }
+}
+
+function linkedRepos(team: Team, local: Local) {
+  for (const { repo } of teamRepos(team)) {
+    const dir = local.repos[repo];
+    const relink = `Run \`houston link\` (or \`houston link --repo ${repo}=/path\`, or \`=none\` if it isn't on this machine).`;
+    if (dir === null) check("ok", `${repo}: not on this machine`);
+    else if (!dir) check("fail", `${repo}: not linked`, relink);
+    else if (!existsSync(dir)) check("fail", `${repo}: ${dir} doesn't exist`, relink);
+    else if (originOf(dir)?.toLowerCase() !== repo.toLowerCase()) check("fail", `${repo}: ${dir} is a clone of ${originOf(dir) ?? "nothing on GitHub"}`, relink);
+    else {
+      const files = [IN_CODE_REPO.pointer, IN_CODE_REPO.inbox];
+      const exclude = existsSync(excludeFile(dir)) ? readFileSync(excludeFile(dir), "utf8").split("\n").map((l) => l.trim()) : [];
+      const bad = files.filter((f) => !existsSync(join(dir, f)) || !exclude.includes(f));
+      check(bad.length ? "fail" : "ok", `${repo}: linked at ${dir}${bad.length ? `, but ${bad.join(" and ")} missing or not hidden from git` : ""}`, "Run `houston link`.");
+    }
+  }
+}
+
+function runs(team: Team) {
+  const s = readState();
+  const now = Date.now();
+  if (!s.last_run) check("warn", "no run yet", "Run `houston run` once to see it work.");
+  else {
+    const age = now - Date.parse(s.last_run.at);
+    const note = `last run ${ago(age)} ago (${s.last_run.outcome}${s.last_run.note ? `: ${s.last_run.note}` : ""})`;
+    if (s.last_run.outcome === "failed") check("fail", note, "Run `houston run` to see the error.");
+    else if (age > 2 * parseDuration(team.runs.every)) check("warn", `${note}; runs.every is ${team.runs.every}`, "Check that your scheduler is running `houston run` (see `houston schedule`).");
+    else check("ok", note);
+  }
+  if (!s.draft) check("ok", "no draft waiting");
+  else {
+    const when = s.draft.deadline ? `publishes ${new Date(s.draft.deadline).toLocaleString()}` : "waits for you";
+    check("warn", `a draft is waiting${s.draft.held ? " (held)" : ""}; it ${s.draft.held ? "waits for you" : when}`, "Read it with `houston draft`, then `houston publish`, `houston draft hold` or edit it.");
+  }
+}
 
 export default {
-  summary: "(not built yet)",
-  usage: "houston doctor",
-  run() {
-    throw new HoustonError("houston doctor is not built yet.");
+  summary: "Check this machine's setup and say how to fix each problem",
+  usage: "houston doctor\n\nExits 1 if any check fails.",
+  async run() {
+    tools();
+    const me = login();
+
+    const found = problems();
+    check(found.length ? "fail" : "ok", "houston.yml and cadences/ are valid", "Run `houston validate` to see the problems.");
+    const team = found.length ? undefined : loadTeam();
+
+    let local: Local | undefined;
+    try {
+      local = loadLocal();
+      check("ok", "houston.local.yml is valid");
+    } catch (e) {
+      check("fail", "houston.local.yml", `${(e as Error).message.split("\n")[0]} Run \`houston link\`.`);
+    }
+
+    if (team) {
+      const who = me ?? local?.user;
+      if (who) check(team.team.members.includes(who) ? "ok" : "fail", `${who} is in team.members`, "Ask a lead to add you to team.members in houston.yml.");
+      if (local) linkedRepos(team, local);
+      const version = await coreVersion();
+      check(version === team.core ? "ok" : "fail", `core ${version} matches core: ${team.core} in houston.yml`, "Run `houston update`, or `git pull` if a teammate already updated the core.");
+    }
+
+    check(existsSync(globalFile()) && readFileSync(globalFile(), "utf8").includes(BLOCK_BEGIN) ? "ok" : "fail", `Houston block in ${globalFile()}`, "Run `houston link`.");
+    check(isTrusted() ? "ok" : "fail", "core is trusted for unattended runs", "Review what changed in .houston/ (`git log -p -- .houston`), then run `houston trust`.");
+    if (team) runs(team);
+    check(local?.schedule ? "ok" : "fail", local?.schedule ? `schedule: ${local.schedule}` : "schedule recorded", "Run `houston schedule`, set it up in your scheduler, then record it with `houston schedule --set \"…\"`.");
+
+    for (const l of lines) console.log(`${{ ok: "✓", fail: "✗", warn: "!" }[l.mark]} ${l.text}${l.mark !== "ok" && l.fix ? ` — ${l.fix}` : ""}`);
+    if (lines.some((l) => l.mark === "fail")) process.exit(1);
   },
 } satisfies Command;

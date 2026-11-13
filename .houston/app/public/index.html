@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- Houston's local app: one page, hash-routed screens rendered by app.js. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Houston</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="shell">
+      <nav class="rail" aria-label="Screens">
+        <div class="who">
+          <div class="team" id="team">Houston</div>
+          <div class="login" id="login"></div>
+          <div class="fresh" id="fresh"></div>
+        </div>
+        <ul>
+          <li><a href="#/today" data-screen="today">Today <kbd>1</kbd></a></li>
+          <li><a href="#/board" data-screen="board">Board <kbd>2</kbd></a></li>
+          <li><a href="#/review" data-screen="review">Review <kbd>3</kbd></a></li>
+          <li><a href="#/draft" data-screen="draft">My draft <kbd>4</kbd></a></li>
+          <li><a href="#/people" data-screen="people">People <kbd>5</kbd></a></li>
+          <li><a href="#/setup" data-screen="setup">Setup <kbd>6</kbd></a></li>
+        </ul>
+      </nav>
+      <main id="main" tabindex="-1"></main>
+    </div>
+    <aside id="panel" class="panel" hidden aria-labelledby="panel-title"></aside>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

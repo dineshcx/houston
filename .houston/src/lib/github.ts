@@ -299,7 +299,9 @@ export class FakeGitHub implements GitHub {
   }
   comment(ref: IssueRef, body: string) {
     const d = this.read();
-    const i = this.find(d, ref);
+    // GitHub takes comments on pull requests through the same issues endpoint.
+    const pr = d.pulls.find((p) => lower(p.repo) === lower(ref.repo) && p.number === ref.number) as (PullRequest & { comments?: string[] }) | undefined;
+    const i = pr ?? this.find(d, ref);
     (i.comments ??= []).push(body);
     this.write(d, `comment ${refText(ref)}`);
   }

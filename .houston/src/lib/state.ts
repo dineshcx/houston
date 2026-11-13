@@ -20,6 +20,8 @@ export type State = {
     /** Hash of draft.md as the run's agent left it; a different hash means the person edited it. */
     agent_hash: string;
     sources: SourceHealth;
+    /** The inbox lines this draft was made from; publishing removes exactly these. */
+    inbox: { file: string; lines: string[] }[];
   };
   /** Hash of .houston/ the person last approved; a changed core won't run unattended. */
   trusted_core?: string;
