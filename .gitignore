@@ -1,0 +1,6 @@
+# Personal to each person's machine (see houston.local.yml in the docs)
+houston.local.yml
+AGENTS.local.md
+.houston-local/
+node_modules/
+.DS_Store
