@@ -4,7 +4,7 @@ import { loadCadences, type Cadence } from "../lib/cadence";
 import { loadTeam, type Rules, type Team } from "../lib/config";
 import { daysInWords } from "../lib/setup";
 
-const PERIOD: Record<Cadence["period"], (c: Cadence) => string> = {
+export const PERIOD: Record<Cadence["period"], (c: Cadence) => string> = {
   day: () => "one page per day",
   week: () => "one page per week, starting Monday",
   month: () => "one page per month",
@@ -12,7 +12,7 @@ const PERIOD: Record<Cadence["period"], (c: Cadence) => string> = {
 };
 
 /** What the rules let agents do, in sentences. */
-function rules(r: Rules): string[] {
+export function rules(r: Rules): string[] {
   return [
     r.status === "auto" ? "Agents move issues between the team's status columns." : "Agents never change an issue's status; people do.",
     r.labels === "auto" ? "Agents set priority and kind labels." : "Agents never change priority or kind labels.",
@@ -28,7 +28,7 @@ function rules(r: Rules): string[] {
   ];
 }
 
-function publishing(team: Team): string {
+export function publishing(team: Team): string {
   const { publish_runs, publish_deadline } = team.rules;
   const base = `Each person's scheduler runs \`houston run\` (about every ${team.runs.every}, plus a catch-up when they open their agent). A run that finds something new drafts their updates with ${team.runs.model} in at most ${team.runs.max_turns} turns.`;
   if (publish_runs === "auto") return `${base} Drafts publish straight away.`;

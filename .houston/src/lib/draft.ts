@@ -38,6 +38,26 @@ export function renderDraft(sections: Section[], header: string): string {
   return [header, ...sections.map((s) => `<!-- houston:${s.kind} ${s.target} -->\n${s.body.trim()}\n`)].join("\n\n").trimEnd() + "\n";
 }
 
+/**
+ * Replaces the body of the index-th section in a draft's text, or removes the section (body null),
+ * leaving every other byte as it was: the header, every other section and every marker line.
+ */
+export function spliceSection(text: string, index: number, body: string | null): string {
+  const lines = text.split("\n");
+  const starts = lines.flatMap((l, i) => (DIRECTIVE.test(l.trimEnd()) ? [i] : []));
+  if (!Number.isInteger(index) || index < 0 || index >= starts.length) throw new HoustonError(`The draft has no section ${index + 1}; it has ${starts.length}.`);
+  const from = starts[index];
+  const to = starts[index + 1] ?? lines.length;
+  if (body === null) {
+    const rest = [...lines.slice(0, from), ...lines.slice(to)].join("\n");
+    return to === lines.length ? rest.trimEnd() + "\n" : rest;
+  }
+  // Keep the blank lines that separated this section from the next one.
+  let blanks = 0;
+  while (to - 1 - blanks > from && lines[to - 1 - blanks].trim() === "") blanks++;
+  return [...lines.slice(0, from + 1), ...body.trim().split("\n"), ...Array(blanks).fill(""), ...lines.slice(to)].join("\n");
+}
+
 function header(d: Draft, tz: string): string {
   const when = d.deadline ? `publishes ${formatAt(d.deadline, tz)} unless you approve or hold it` : "publishes when you approve it";
   return `<!-- houston draft · window ${formatAt(d.window_start, tz)} → ${formatAt(d.window_end, tz)} · ${when} -->`;

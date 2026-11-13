@@ -15,7 +15,7 @@ The left rail lists **Pages** (one link per cadence) and then the other screens:
 
 A cadence's pages, opening on the current period: pick the cadence (Daily standup, Sprint, …) in the rail, and step to earlier or later periods.
 
-- **Notes**: the period's `_page.md`, written by people. Edit it, preview it, and **Save** (it commits and pushes).
+- **Notes**: the period's `_page.md`, written by people. Saving writes the file on your laptop straight away; Houston commits and pushes it 30 seconds after your last change, when you leave the page, and when the app stops. If a teammate pushed a change to the same Notes first, nothing is overwritten: you get their version and yours back to merge (yours is also kept in `.houston-local/conflicts/`).
 - **Updates**: each member's Update from their runs, with its footer: run time, each source's health, and "not reviewed" if it published on its own. Members with no Update yet show "No update yet".
 - **Create the page** if the current period has none yet.
 

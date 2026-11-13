@@ -9,5 +9,5 @@
     "types": ["bun"],
     "lib": ["ESNext", "DOM"]
   },
-  "include": ["src", "app", "test"]
+  "include": ["src", "app", "test", "scripts"]
 }

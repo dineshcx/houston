@@ -4,9 +4,17 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
+    "demo": "bun scripts/demo.ts",
+    "build:editor": "bun app/editor/build.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@tiptap/core": "3.32.2",
+    "@tiptap/extension-list": "3.32.2",
+    "@tiptap/extensions": "3.32.2",
+    "@tiptap/markdown": "3.32.2",
+    "@tiptap/pm": "3.32.2",
+    "@tiptap/starter-kit": "3.32.2",
     "@types/bun": "latest",
     "typescript": "^5.9.0"
   }
