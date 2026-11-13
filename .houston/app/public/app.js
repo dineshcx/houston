@@ -34,6 +34,7 @@ function inline(s) {
   s = s.replace(/`([^`]+)`/g, (_, c) => keep(`<code>${c}</code>`));
   s = s.replace(/\[([^\]]+)\]\(([^\s)]+)\)/g, (m, text, href) => (SAFE_URL.test(href) ? keep(`<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`) : m));
   s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (_, pre, href) => pre + keep(`<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>`));
+  s = s.replace(/(^|[^\w./-])([\w.-]+\/[\w.-]+)#(\d+)\b/g, (_, pre, repo, n) => pre + keep(`<a href="https://github.com/${repo}/issues/${n}" target="_blank" rel="noopener noreferrer">${repo}#${n}</a>`));
   s = s
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^\w*])\*([^*\s][^*]*)\*(?!\w)/g, "$1<em>$2</em>")
@@ -197,6 +198,7 @@ async function pages([cadence, project, period]) {
       </div>`}`);
 
   $("#project")?.addEventListener("change", (e) => (location.hash = pageLink(cadence, e.target.value)));
+  for (const b of $$("[data-go]")) b.addEventListener("click", () => (location.hash = b.dataset.go));
   $("#create")?.addEventListener("click", (e) =>
     act(e.target, $("#page-msg"), async () => {
       await api(`/api/page/${encodeURIComponent(project)}/${encodeURIComponent(cadence)}`, { method: "POST" });
@@ -218,9 +220,9 @@ function periodBar(data, projects) {
       <h1>${data.cadence.title} <span class="date">${day(data.period)}</span></h1>
       ${data.frozen ? html`<span class="badge frozen" title="The next period has started, so this page no longer changes">Frozen</span>` : ""}
       <div class="period-nav">
-        ${data.prev ? html`<a class="btn" href="${link(data.prev)}" aria-label="Previous period">‹ ${data.prev}</a>` : html`<span class="btn" aria-disabled="true">‹</span>`}
+        ${data.prev ? html`<button class="btn" data-go="${link(data.prev)}" aria-label="Previous period, ${day(data.prev)}">‹ ${data.prev}</button>` : html`<button class="btn" disabled aria-label="No earlier period">‹</button>`}
         ${data.period === data.current ? "" : html`<a class="btn" href="${link(data.current)}">Current</a>`}
-        ${data.next ? html`<a class="btn" href="${link(data.next)}" aria-label="Next period">${data.next} ›</a>` : html`<span class="btn" aria-disabled="true">›</span>`}
+        ${data.next ? html`<button class="btn" data-go="${link(data.next)}" aria-label="Next period, ${day(data.next)}">${data.next} ›</button>` : html`<button class="btn" disabled aria-label="No later period">›</button>`}
       </div>
     </div>`;
 }

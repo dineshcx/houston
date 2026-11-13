@@ -7,8 +7,9 @@ import { basename, dirname, join, relative } from "node:path";
 import { Checker, LOGIN, PRIORITIES, readYaml, STATUSES, type Team } from "./config";
 import { github, parseRef, refText, type IssueRef } from "./github";
 import { ISSUE_KINDS, SUMMARY_END, SUMMARY_START, assertTeamRepo, readSummary, replaceSummary, writeLabels, writeSummary } from "./issues";
+import { writeInRepo } from "./pages";
 import { paths } from "./paths";
-import { commitAndPush, defaultBranch, git, houstonRepo } from "./repo";
+import { commitAndPush, defaultBranch, git, houstonRepo, notReady } from "./repo";
 import { HoustonError, iso } from "./util";
 
 export type Create = { repo: string; title: string; goal?: string; next_step?: string; assignee?: string; priority?: string; kind?: string; raised_by?: string; parent?: number | string };
@@ -81,7 +82,8 @@ export function validateProposal(raw: unknown, team: Team): { proposal?: Proposa
     } else if (kind === "update") {
       teamIssue(f.issue, `${path}.issue`);
       for (const k of ["add_decision", "add_question", "next_step"]) c.str(f[k], `${path}.${k}`, { optional: true });
-      oneOf(f.status, `${path}.status`, STATUSES);
+      // Only the team's own columns, so the issue shows up on their board.
+      oneOf(f.status, `${path}.status`, team.status.columns.map((c) => c.label));
       if (!["add_decision", "add_question", "next_step", "status"].some((k) => f[k] !== undefined)) c.fail(path, "says nothing to change: add add_decision, add_question, next_step or status");
     } else {
       teamIssue(f.issue, `${path}.issue`);
@@ -303,16 +305,15 @@ export function applyProposal(team: Team, file: string, me: string): string {
     } catch (e) {
       results[i] = CREATED.test(results[i] ?? "") ? `${results[i]}; failed: ${message(e)}` : `failed: ${message(e)}`;
       // Record what landed before stopping, so the next attempt picks up from here.
-      writeFileSync(file, withRecord(text, { at: iso(new Date()), by: me, results }));
+      writeInRepo(file, withRecord(text, { at: iso(new Date()), by: me, results }));
       commitAndPush([file], `Intake: partly applied ${name}`);
       const doneCount = results.filter(isDone).length;
       throw new HoustonError(`${name}: applied ${doneCount} of ${p.changes.length} changes, then change ${i + 1} failed: ${message(e)}\nFix the cause and run \`houston apply ${rel}\` again; it continues from change ${i + 1}.`);
     }
   }
 
-  mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, withRecord(text, { at: iso(new Date()), by: me, results }));
-  if (file !== dest) unlinkSync(file);
+  writeInRepo(dest, withRecord(text, { at: iso(new Date()), by: me, results }));
+  if (file !== dest) unlinkSync(file); // the merged proposal, a tracked file pendingProposals found
   commitAndPush(file === dest ? [dest] : [file, dest], `Intake: applied ${name}`);
   const note = commentOnPr(name, me, results);
   return [`${name}: applied ${p.changes.length} change(s)${note ? ` (${note})` : ""}`, ...results.map((r, i) => `  ${i + 1}. ${r}`)].join("\n");
@@ -343,11 +344,10 @@ export function pendingProposals(): string[] {
     .map((f) => join(paths.root, f));
 }
 
-/** Throws unless the Houston repo is on its default branch, the only place merged proposals are. */
+/** Throws unless the Houston repo is on its default branch (the only place merged proposals are) and not mid-rebase. */
 export function assertOnDefaultBranch() {
-  const base = defaultBranch();
-  const current = git(["rev-parse", "--abbrev-ref", "HEAD"]).stdout;
-  if (current !== base) throw new HoustonError(`The Houston repo is on branch ${current}. Switch it to ${base} (\`git -C ${paths.root} switch ${base}\`) so merged proposals can be applied.`);
+  const busy = notReady();
+  if (busy) throw new HoustonError(`Proposals weren't applied: ${busy}`);
 }
 
 const ownerOf = (file: string) => {

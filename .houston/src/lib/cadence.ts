@@ -53,9 +53,6 @@ export function parseSchedule(text: string): Schedule {
   return { days: [...days].sort(), time: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}` };
 }
 
-export function formatSchedule(s: Schedule): string {
-  return `${s.days.map((d) => DAY_NAMES[d]).join(",")} ${s.time}`;
-}
 
 // ---------- dates in a timezone ----------
 

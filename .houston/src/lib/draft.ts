@@ -10,7 +10,7 @@ import { github, parseRef, refText } from "./github";
 import { assertTeamRepo, planLabels, SUMMARY_END, SUMMARY_START, writeLabels, writeSummary } from "./issues";
 import { dayLogFile, footer, myProjects, pageFile, stripFooter, writeInRepo } from "./pages";
 import { paths } from "./paths";
-import { commitAndPush } from "./repo";
+import { commitAndPush, notReady } from "./repo";
 import { hash, readState, updateState, windowStart, type SourceHealth, type State } from "./state";
 import { HoustonError, iso, parseDuration } from "./util";
 
@@ -215,6 +215,8 @@ export function publishDraft(opts: { notReviewed?: boolean; now?: Date } = {}): 
   const now = opts.now ?? new Date();
   const st = draftStatus();
   if (!st) throw new HoustonError("There is no draft to publish. `houston run` makes one.");
+  const busy = notReady();
+  if (busy) throw new HoustonError(`Not published: ${busy}`);
   const ctx = loadContext();
   const { team, local } = ctx;
   const window = windowOf(st.draft);

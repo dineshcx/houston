@@ -266,6 +266,37 @@ describe("houston run", () => {
   }, 60_000);
 });
 
+describe("the run's agent", () => {
+  test("can write the whole draft in one call", () => {
+    const h = setup();
+    const d = today();
+    const r = h.cli(["draft", "add"], `<!-- houston:day ${d} -->\n## Done\n- acme/web#12 done\n\n<!-- houston:labels acme/web#12 -->\nstatus:in-review\n`);
+    expect(r.err).toBe("");
+    expect(r.out).toContain(`Added day ${d}`);
+    expect(r.out).toContain("Added labels acme/web#12");
+    expect(readFileSync(h.draft, "utf8")).toContain("status:in-review");
+  }, 60_000);
+
+  test("writes that were refused are a failed run, and the window stays open", () => {
+    const h = setup();
+    // What Claude Code prints with --output-format json when dontAsk refused a command.
+    writeFileSync(join(h.tmp, "agent.sh"), `echo '{"type":"result","permission_denials":[{"tool_name":"Bash","tool_input":{"command":"H=/x; $H draft add day"}}]}'\n`);
+    const r = h.cli(["run"]);
+    expect(r.out).toContain("tried commands Houston doesn't allow");
+    expect(h.state().last_run.outcome).toBe("failed");
+    expect(h.state().last_publish).toBeUndefined();
+    expect(readFileSync(join(h.web, ".houston-inbox.md"), "utf8")).toContain("retries done");
+  }, 60_000);
+
+  test("an agent that finds nothing worth writing moves the window on", () => {
+    const h = setup();
+    writeFileSync(join(h.tmp, "agent.sh"), "true\n");
+    expect(h.cli(["run"]).out).toContain("nothing worth writing");
+    expect(h.state().last_publish).toBeDefined();
+    expect(readFileSync(join(h.web, ".houston-inbox.md"), "utf8")).toBe("");
+  }, 60_000);
+});
+
 describe("the trusted core", () => {
   test("runs refuse a core that isn't approved", () => {
     const h = setup();
@@ -297,6 +328,19 @@ describe("the trusted core", () => {
     expect(existsSync(join(h.root, "skills/run/SKILL.md"))).toBe(true); // pulled
     expect(h.agentCalls()).toBe(0);
     expect(h.state().draft).toBeUndefined();
+  }, 60_000);
+
+  test("the shim ignores a .env in the folder it runs from", () => {
+    const h = setup();
+    // A committed .env could otherwise point HOUSTON_AGENT at any command.
+    writeFileSync(join(h.root, ".env"), `HOUSTON_AGENT=touch ${join(h.tmp, "pwned")}\n`);
+    // A stand-in claude, so the test never starts the real one.
+    mkdirSync(join(h.tmp, "nobin"));
+    writeFileSync(join(h.tmp, "nobin/claude"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    const env = { ...process.env, HOUSTON_ROOT: h.root, HOME, HOUSTON_FAKE_GITHUB: join(h.tmp, "github.json"), HOUSTON_NO_NOTIFY: "1", PATH: `${h.tmp}/nobin:${process.env.PATH}` };
+    delete (env as Record<string, string | undefined>).HOUSTON_AGENT;
+    Bun.spawnSync([join(h.root, ".houston-local/core/bin/houston"), "run", "--quiet"], { cwd: h.root, env, timeout: 30_000 });
+    expect(existsSync(join(h.tmp, "pwned"))).toBe(false);
   }, 60_000);
 
   test("the shim ignores a bunfig.toml in the folder it runs from", () => {

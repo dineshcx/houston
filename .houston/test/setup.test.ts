@@ -112,6 +112,11 @@ describe("link", () => {
     // The agent runs the trusted copy, never the core a pull just brought in.
     expect(claude).toContain("<houston>/.houston-local/core/bin/houston run --if-due --quiet");
     expect(existsSync(join(ROOT, ".houston-local/core/bin/houston"))).toBe(true);
+
+    // Both scheduler examples give the run the PATH it needs (cron and agent apps start with a bare one).
+    const schedule = houston(["schedule"]).out;
+    expect(schedule).toMatch(/PATH=\S+ \S+\/\.houston-local\/core\/bin\/houston run/);
+    expect(schedule).toMatch(/with bun, claude, gh and git on its PATH \(\S+\)/);
   });
 
   test("the block lists both teams' Houston repos, and removing one keeps the other", () => {
@@ -221,10 +226,12 @@ test("schedule suggests runs an hour before, at the publish deadline, and throug
 });
 
 test("a team skill overrides the core skill of the same name", () => {
-  expect(houston(["skill", "set-me-up"]).out.trim()).toEndWith(".houston/skills/set-me-up/SKILL.md");
+  expect(houston(["skill", "set-me-up", "--path"]).out.trim()).toEndWith(".houston/skills/set-me-up/SKILL.md");
+  expect(houston(["skill", "set-me-up"]).out).toMatch(/^\(skill: \S+\/\.houston\/skills\/set-me-up\/SKILL\.md, core\)\n\n---\nname: set-me-up/);
   mkdirSync(join(ROOT, "skills", "set-me-up"), { recursive: true });
   writeFileSync(join(ROOT, "skills", "set-me-up", "SKILL.md"), "ours");
-  expect(houston(["skill", "set-me-up"]).out.trim()).toBe(join(ROOT, "skills", "set-me-up", "SKILL.md"));
+  expect(houston(["skill", "set-me-up", "--path"]).out.trim()).toBe(join(ROOT, "skills", "set-me-up", "SKILL.md"));
+  expect(houston(["skill", "set-me-up"]).out).toBe(`(skill: ${join(ROOT, "skills", "set-me-up", "SKILL.md")}, team override)\n\nours`);
   expect(houston(["skill"]).out).toMatch(/set-me-up .*\(team override\)/);
   expect(houston(["skill", "nope"]).code).toBe(1);
 });

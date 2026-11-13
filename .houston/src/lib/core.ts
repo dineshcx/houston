@@ -5,10 +5,13 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { paths } from "./paths";
+import { git } from "./repo";
 import { hash, readState, updateState } from "./state";
 
 /** Not part of what runs: installed dev tools, tests and docs. */
-const SKIP = new Set(["node_modules", "test", "docs", ".DS_Store"]);
+/** Never copied or hashed: installed tools and OS litter anywhere, and .houston/test and .houston/docs (they don't run). */
+const SKIP = new Set(["node_modules", ".DS_Store"]);
+const TOP_SKIP = new Set(["test", "docs"]);
 
 /** The team's own run skill: an unattended run follows it, so changing it needs approval too. */
 const runSkillOverride = () => join(paths.teamSkills, "run", "SKILL.md");
@@ -18,7 +21,7 @@ function coreFiles(): [string, Buffer][] {
   const out: [string, Buffer][] = [];
   const walk = (rel: string) => {
     for (const name of readdirSync(join(paths.repoCore, rel)).sort()) {
-      if (SKIP.has(name)) continue;
+      if (SKIP.has(name) || (!rel && TOP_SKIP.has(name))) continue;
       const r = rel ? `${rel}/${name}` : name;
       const st = lstatSync(join(paths.repoCore, r));
       if (st.isDirectory()) walk(r);
@@ -64,6 +67,10 @@ export function trustCore(): string {
   rmSync(paths.trustedCore, { recursive: true, force: true });
   renameSync(next, paths.trustedCore);
   const h = hashOf(files);
-  updateState((s) => (s.trusted_core = h));
+  const commit = git(["rev-parse", "HEAD"]);
+  updateState((s) => {
+    s.trusted_core = h;
+    if (commit.ok) s.trusted_commit = commit.stdout;
+  });
   return h;
 }

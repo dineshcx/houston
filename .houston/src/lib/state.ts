@@ -1,5 +1,5 @@
 // A person's run state on this machine: .houston-local/state.json (gitignored), and the run lock.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { paths } from "./paths";
 
@@ -29,6 +29,8 @@ export type State = {
   };
   /** Hash of .houston/ (and the team's run skill) the person last approved; a changed core won't run unattended. */
   trusted_core?: string;
+  /** The Houston repo's commit when the person last trusted the core, to show what changed since. */
+  trusted_commit?: string;
 };
 
 export function readState(): State {
@@ -65,9 +67,13 @@ const alive = (pid: number) => {
   }
 };
 
+/** No run takes this long (the agent is stopped after 10 minutes), so an older lock is left over. */
+const LOCK_STALE_MS = 30 * 60_000;
+
 /**
  * Takes the one-run-at-a-time lock (a file holding our pid). Returns the release function, or
- * undefined when another live process holds it. A lock left by a process that died is taken over.
+ * undefined when another live process holds it. A lock whose process died, or that is older than
+ * any run (after a crash the pid may now belong to something else), is taken over.
  */
 export function tryLock(): (() => void) | undefined {
   mkdirSync(paths.localDir, { recursive: true });
@@ -77,7 +83,9 @@ export function tryLock(): (() => void) | undefined {
       return () => rmSync(LOCK, { force: true });
     } catch {
       const pid = Number(existsSync(LOCK) ? readFileSync(LOCK, "utf8") : 0);
-      if (pid && alive(pid)) return undefined;
+      const old = existsSync(LOCK) && Date.now() - statSync(LOCK).mtimeMs > LOCK_STALE_MS;
+      // ponytail: two runs taking over the same stale lock at the same instant can both proceed; rare enough.
+      if (pid && alive(pid) && !old) return undefined;
       rmSync(LOCK, { force: true });
     }
   }

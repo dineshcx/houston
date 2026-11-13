@@ -1,5 +1,6 @@
-// Git in the Houston repo. Houston never commits to a code repo; every commit here goes through
-// commitAndPush or withWorktree, which refuse to run on a repo in the middle of something.
+// Git in the Houston repo. Houston never commits to a code repo. Commits to the person's checkout go
+// through commitAndPush, which refuses a repo in the middle of something (see notReady); commits for
+// pull requests go through withWorktree, which never touches the checkout at all.
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -54,8 +55,8 @@ export function notReady(): string | undefined {
     return `the Houston repo (${paths.root}) is in the middle of a rebase or merge. Finish it (or \`git rebase --abort\`) and try again.`;
   const branch = git(["symbolic-ref", "--short", "HEAD"]);
   if (!branch.ok) return `the Houston repo (${paths.root}) isn't on a branch. Run \`git -C ${paths.root} switch ${defaultBranch()}\`.`;
-  const main = defaultBranch();
-  if (hasRemote() && branch.stdout !== main) return `the Houston repo (${paths.root}) is on branch ${branch.stdout}. Houston writes to ${main}; switch back with \`git -C ${paths.root} switch ${main}\`.`;
+  const main = hasRemote() ? defaultBranch() : branch.stdout;
+  if (branch.stdout !== main) return `the Houston repo (${paths.root}) is on branch ${branch.stdout}. Houston writes to ${main}; switch back with \`git -C ${paths.root} switch ${main}\`.`;
 }
 
 /**
@@ -90,7 +91,11 @@ export function commitAndPush(files: string[], message: string): { committed: bo
   const changed = !git(["diff", "--cached", "--quiet", "--", ...rel]).ok;
   if (changed) mustGit(["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", message, "--", ...rel]);
   if (!hasRemote()) return { committed: changed, pushed: false, note: "no remote to push to" };
-  if (!changed && !ahead()) return { committed: false, pushed: false, note: "nothing changed" };
+  if (!changed && !ahead() && git(["rev-parse", "--abbrev-ref", "@{upstream}"]).ok) return { committed: false, pushed: false, note: "nothing changed" };
+  if (!git(["rev-parse", "--abbrev-ref", "@{upstream}"]).ok) {
+    if (git(["push", "--quiet", "-u", "origin", "HEAD"]).ok) return { committed: changed, pushed: true };
+    throw new HoustonError(`Committed, but couldn't push: the branch has no upstream and \`git push -u origin HEAD\` failed. Run it in ${paths.root} to see why.`);
+  }
   for (let attempt = 0; attempt < 2; attempt++) {
     if (git(["push", "--quiet"]).ok) return { committed: changed, pushed: true };
     if (!pull().ok) break;

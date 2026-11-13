@@ -6,9 +6,9 @@ import { join } from "node:path";
 import type { Command } from "../command";
 import { formatAt } from "../lib/cadence";
 import { loadLocal, loadTeam, teamRepos, type Local, type Team } from "../lib/config";
-import { isTrusted } from "../lib/core";
+import { isTrusted, repoCoreVersion } from "../lib/core";
 import { github } from "../lib/github";
-import { coreVersion, IN_CODE_REPO, paths } from "../lib/paths";
+import { IN_CODE_REPO, paths } from "../lib/paths";
 import { originOf } from "../lib/repo";
 import { BLOCK_BEGIN, blockRoots, excludeFile, globalFile, houstonRoot, systemTimezone } from "../lib/setup";
 import { readState } from "../lib/state";
@@ -78,10 +78,10 @@ function globalBlock() {
 
 /** Same wording as `houston trust`: trusting for the first time is routine; a changed core needs a review first. */
 async function trust() {
-  const version = await coreVersion();
+  const version = repoCoreVersion();
   if (isTrusted()) check("ok", `core ${version} is trusted for unattended runs`);
   else if (!readState().trusted_core) check("fail", `core ${version} isn't trusted on this machine yet`, "Run `houston link` (or `houston trust`).");
-  else check("fail", `core ${version} has changed since you last trusted it, so runs won't start`, `Review the change with \`git -C ${paths.root} log -p -- .houston\`, then run \`houston trust\`.`);
+  else check("fail", `core ${version} has changed since you last trusted it, so runs won't start`, `Review the change with \`git -C ${paths.root} log -p -- .houston skills/run\` (and \`git diff\` for uncommitted changes), then run \`houston trust\`.`);
 }
 
 function runs(team: Team, tz: string) {
@@ -123,7 +123,7 @@ export default {
       const who = me ?? local?.user;
       if (who) check(team.team.members.includes(who) ? "ok" : "fail", `${who} is in team.members`, "Ask a lead to add you to team.members in houston.yml.");
       if (local) linkedRepos(team, local);
-      const version = await coreVersion();
+      const version = repoCoreVersion();
       check(version === team.core ? "ok" : "fail", `core ${version} matches core: ${team.core} in houston.yml`, "Run `houston update`, or `git pull` if a teammate already updated the core.");
     }
 

@@ -2,21 +2,40 @@
 // `.houston` pointer and inbox in each repo (hidden through .git/info/exclude), AGENTS.local.md and
 // the block in ~/.claude/CLAUDE.md. Every step is planned first and only written if it changes
 // something, so running it again changes nothing and --dry-run shows exactly what would happen.
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Command } from "../command";
 import { loadTeam, projectOf, teamRepos, type Local } from "../lib/config";
-import { isTrusted, trustCore } from "../lib/core";
+import { isTrusted, repoCoreVersion, trustCore } from "../lib/core";
 import { github } from "../lib/github";
-import { coreVersion, IN_CODE_REPO, paths } from "../lib/paths";
+import { IN_CODE_REPO, paths } from "../lib/paths";
 import { git, originOf } from "../lib/repo";
 import { agentsLocalText, blockRoots, excludeFile, findRepos, globalBlock, globalFile, houstonRoot, localText, pointerText, readLocalRaw, realDir, systemTimezone, withRoot } from "../lib/setup";
-import { home, HoustonError, UsageError } from "../lib/util";
+import { home, HoustonError, sh, UsageError } from "../lib/util";
 
 type Change = { what: string; apply: () => void };
 
 const read = (file: string) => (existsSync(file) ? readFileSync(file, "utf8") : "");
+/**
+ * Why Houston must not write or delete this file in a code repo, if it mustn't: a symlink (writing
+ * through it would change a file elsewhere on the machine) or a file the repo itself tracks.
+ */
+function notOurs(dir: string, file: string): string | undefined {
+  if (existsSync(file) || lstatOrUndefined(file)) {
+    if (lstatOrUndefined(file)?.isSymbolicLink()) return `${file} is a symlink, so Houston won't write through it.`;
+    if (sh(["git", "-C", dir, "ls-files", "--error-unmatch", "--", file]).ok) return `${file} is committed in that repo, so it isn't Houston's to change.`;
+  }
+}
+
+const lstatOrUndefined = (file: string) => {
+  try {
+    return lstatSync(file);
+  } catch {
+    return undefined;
+  }
+};
+
 const write = (file: string, text: string) => (mkdirSync(dirname(file), { recursive: true }), writeFileSync(file, text));
 const excludeLines = (file: string) => read(file).split("\n").map((l) => l.trim());
 
@@ -68,9 +87,14 @@ function planLink(opts: { overrides: string[]; global: boolean }): { changes: Ch
     const origin = originOf(dir);
     if (origin?.toLowerCase() !== repo.toLowerCase()) notes.push(`${dir} has origin ${origin ?? "(none)"}, not ${repo}. Linked anyway, as you asked.`);
     const pointer = join(dir, IN_CODE_REPO.pointer);
+    const inbox = join(dir, IN_CODE_REPO.inbox);
+    const unsafe = [pointer, inbox].map((f) => notOurs(dir, f)).find(Boolean);
+    if (unsafe) {
+      notes.push(`Skipped ${repo}: ${unsafe}`);
+      continue;
+    }
     const pointerBody = pointerText(repo, project);
     if (read(pointer) !== pointerBody) changes.push({ what: `${repo}: write ${pointer}`, apply: () => write(pointer, pointerBody) });
-    const inbox = join(dir, IN_CODE_REPO.inbox);
     if (!existsSync(inbox)) changes.push({ what: `${repo}: create an empty ${inbox}`, apply: () => write(inbox, "") });
     const exclude = excludeFile(dir);
     const add = [IN_CODE_REPO.pointer, IN_CODE_REPO.inbox].filter((n) => !excludeLines(exclude).includes(n));
@@ -114,6 +138,11 @@ function planRemove(force: boolean): { changes: Change[]; notes: string[] } {
     if (!dir || !existsSync(dir)) continue;
     const gone: string[] = [];
     const pointer = join(dir, IN_CODE_REPO.pointer);
+    const unsafe = [pointer, join(dir, IN_CODE_REPO.inbox)].map((f) => notOurs(dir, f)).find(Boolean);
+    if (unsafe) {
+      notes.push(`Left ${repo} alone: ${unsafe}`);
+      continue;
+    }
     if (existsSync(pointer)) changes.push({ what: `${repo}: delete ${pointer}`, apply: () => rmSync(pointer) }), gone.push(IN_CODE_REPO.pointer);
     const inbox = join(dir, IN_CODE_REPO.inbox);
     if (existsSync(inbox) && read(inbox).trim() && !force) notes.push(`Kept ${inbox}: it has notes in it. Add --force to delete it too.`);
@@ -178,7 +207,7 @@ Running it again only fixes what changed.
     } else {
       const plan = planLink({ overrides: values.repo ?? [], global: !values["no-global"] });
       ({ changes, notes, missing } = plan);
-      console.log(`You: ${plan.local.user}, timezone ${plan.local.timezone}. Core ${await coreVersion()}.`);
+      console.log(`You: ${plan.local.user}, timezone ${plan.local.timezone}. Core ${repoCoreVersion()}.`);
       console.log("Repos:");
       for (const [repo, dir] of Object.entries(plan.local.repos ?? {})) console.log(`  ${repo}: ${dir ?? "not on this machine"}`);
       for (const repo of missing) console.log(`  ${repo}: not found`);

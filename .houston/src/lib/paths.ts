@@ -52,4 +52,3 @@ export const paths = {
 /** Files Houston keeps in each linked code repo, hidden from git through .git/info/exclude. */
 export const IN_CODE_REPO = { pointer: ".houston", inbox: ".houston-inbox.md" };
 
-export const coreVersion = () => (existsSync(paths.version) ? Bun.file(paths.version).text() : Promise.resolve("0.0.0")).then((v) => v.trim());

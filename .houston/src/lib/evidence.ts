@@ -2,7 +2,7 @@
 // their inbox and their Claude Code sessions, each piece matched to an issue or left under Other.
 // Ported from Mission Control's standup.py. Matching follows one fixed order and never guesses,
 // so two runs over the same evidence always sort it the same way, and nothing is dropped.
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatAt } from "./cadence";
 import { projectOf, teamRepos, type Local, type Team } from "./config";
@@ -118,8 +118,9 @@ export function collect(team: Team, local: Local, since: Date, now = new Date())
   }
 
   // A commit both on GitHub and in a local checkout shows once, from git, which knows its branch.
-  const inGit = new Set(d.items.filter((e) => e.source === "git").map((e) => `${e.repo} ${e.kind.slice(0, 14)}`));
-  d.items = d.items.filter((e) => e.source !== "github" || !inGit.has(`${e.repo} ${e.kind.slice(0, 14)}`));
+  const commitKey = (e: Evidence) => `${e.repo.toLowerCase()} ${e.kind.slice(0, 14)}`;
+  const inGit = new Set(d.items.filter((e) => e.source === "git").map(commitKey));
+  d.items = d.items.filter((e) => e.source !== "github" || !inGit.has(commitKey(e)));
   d.items.sort((a, b) => (a.at ?? "").localeCompare(b.at ?? ""));
   for (const e of d.items) Object.assign(e, match(e, d.assigned));
   return d;
@@ -172,13 +173,25 @@ function gitWork(repo: string, path: string, since: Date, now: Date): { local: L
 
 function readInbox(path: string): string[] {
   const file = join(path, IN_CODE_REPO.inbox);
-  return existsSync(file) ? readFileSync(file, "utf8").split("\n").map((l) => l.trim()).filter(Boolean) : [];
+  return isPlainFile(file) ? readFileSync(file, "utf8").split("\n").map((l) => l.trim()).filter(Boolean) : [];
+}
+
+/**
+ * A regular file, not a symlink. A code repo could commit `.houston-inbox.md` as a link to the
+ * person's credentials; reading (and later emptying) that would leak and destroy them.
+ */
+export function isPlainFile(file: string): boolean {
+  try {
+    return lstatSync(file).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /** Removes the inbox lines a published run used. Lines added since then stay for the next run. */
 export function consumeInbox(batches: InboxBatch[]) {
   for (const { file, lines: used } of batches) {
-    if (!existsSync(file)) continue;
+    if (!isPlainFile(file)) continue;
     const left = readFileSync(file, "utf8").split("\n");
     for (const line of used) {
       const i = left.findIndex((l) => l.trim() === line);

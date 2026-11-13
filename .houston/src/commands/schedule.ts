@@ -10,7 +10,7 @@ import { paths } from "../lib/paths";
 import { cronLines, daysInWords, houstonRoot, instruction, localText, readLocalRaw, suggestRuns, systemTimezone, trustedBin } from "../lib/setup";
 import { HoustonError, UsageError } from "../lib/util";
 
-/** Cron starts jobs with a bare PATH, so the crontab line carries the folders of the tools a run needs. */
+/** Schedulers often start jobs with a bare PATH, so the examples name the folders of the tools a run needs. */
 function cronPath(): string {
   const dirs = ["bun", "claude", "gh", "git"].map((t) => Bun.which(t)).filter((p): p is string => !!p).map(dirname);
   return [...new Set([...dirs, "/usr/bin", "/bin"])].join(":");
@@ -55,7 +55,7 @@ use any scheduler you like.
     for (const r of suggested) byDays.set(daysInWords(r.days), [...(byDays.get(daysInWords(r.days)) ?? []), r.time]);
     const when = [...byDays].map(([days, times]) => `${times.join(", ")} on ${days}`).join("; and ");
     console.log(`\nExample 2, an agent app's scheduled task. Tell it:\n`);
-    console.log(`  "Create a scheduled task that runs on this machine, not in the cloud, at ${when} (${local.timezone}). It runs this in a terminal and does nothing else: ${cmd}"\n`);
+    console.log(`  "Create a scheduled task that runs on this machine, not in the cloud, at ${when} (${local.timezone}). It runs this in a terminal, with bun, claude, gh and git on its PATH (${cronPath()}), and does nothing else: ${cmd}"\n`);
     console.log(local.schedule ? `Recorded schedule: ${local.schedule}` : 'Once it\'s set up, record it: houston schedule --set "<scheduler, task name, when>"');
   },
 } satisfies Command;

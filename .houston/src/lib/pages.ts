@@ -6,7 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { periodDir, periodOf, renderPage, zoned, type Cadence } from "./cadence";
 import type { Context, Local, Team } from "./config";
 import { paths } from "./paths";
-import { commitAndPush } from "./repo";
+import { commitAndPush, notReady } from "./repo";
 import type { SourceHealth } from "./state";
 import { HoustonError } from "./util";
 
@@ -90,6 +90,8 @@ export function ensurePage(project: string, c: Cadence, period: string): string 
 
 /** Creates the pages of every cadence period open now; commits and pushes the new ones. */
 export function ensureTodayPages(ctx: Context, now = new Date()): string[] {
+  const busy = notReady();
+  if (busy) throw new HoustonError(busy);
   const files = openPeriods(ctx, Object.keys(ctx.team.projects), now)
     .map((o) => ensurePage(o.project, o.cadence, o.period))
     .filter((f): f is string => !!f);

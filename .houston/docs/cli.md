@@ -31,10 +31,13 @@ Collects your work since your last published run, has Claude Code draft your upd
 ```
 houston draft
 houston draft add <kind> <target> [--file f]
+houston draft add [--file f]
 houston draft hold | release | discard
 ```
 
-Shows your run's draft and when it publishes; adds or replaces one section; holds it back, lets it publish, or throws it away. Each section is checked when added. The run's agent writes the draft with `draft add`; you'll mostly use the others.
+Shows your run's draft and when it publishes; adds or replaces sections; holds it back, lets it publish, or throws it away. Each section is checked when added. The run's agent writes the whole draft in one `draft add` call; you'll mostly use the others.
+
+With a kind and target, `draft add` adds or replaces that one section. Without them, it takes several sections at once in the draft's own format: each starts with a `<!-- houston:<kind> <target> -->` line.
 
 | Kind | Target | Section |
 | --- | --- | --- |
@@ -49,6 +52,13 @@ The text comes from `--file`, or stdin. During a run only stdin is accepted, so 
 ```sh
 houston draft add labels acme/web#15 <<'END'
 status:in-progress
+END
+
+houston draft add <<'END'
+<!-- houston:day 2026-11-13 -->
+- Fixed the checkout retry bug (acme/web#15)
+<!-- houston:labels acme/web#15 -->
+status:in-review
 END
 ```
 
@@ -116,7 +126,7 @@ Checks this laptop: git, Bun, Claude Code, `gh` sign-in, `houston.yml` and caden
 houston schedule [--set "<sentence>"]
 ```
 
-Prints the one instruction your scheduler should run, suggested times from your team's cadences in your timezone, a crontab example and a sentence to give an agent app's scheduled tasks. The instruction runs your trusted copy:
+Prints the one instruction your scheduler should run, suggested times from your team's cadences in your timezone, a crontab example (with the `PATH` cron needs) and a sentence to give an agent app's scheduled tasks. Whatever runs it needs `bun`, `claude`, `gh` and `git` on its `PATH`. The instruction runs your trusted copy:
 
 ```sh
 cd <houston repo> && <houston repo>/.houston-local/core/bin/houston run
@@ -175,10 +185,14 @@ The team's setup in plain words: people, projects, repos, cadences, status colum
 ### skill
 
 ```
-houston skill [<name>]
+houston skill [<name>] [--path]
 ```
 
-With a name, prints the path of the `SKILL.md` to follow: the team's `skills/<name>/SKILL.md` if there is one, otherwise the core's. Without one, lists every skill and marks team overrides.
+With a name, prints the skill's instructions to follow: the team's `skills/<name>/SKILL.md` if there is one, otherwise the core's. The first line says which file it is, like `(skill: <path>, team override)` or `(skill: <path>, core)`. Without a name, lists every skill and marks team overrides.
+
+| Flag | |
+| --- | --- |
+| `--path` | print only the path of that `SKILL.md` |
 
 ```sh
 houston skill intake

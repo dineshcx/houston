@@ -8,7 +8,8 @@ import { parseArgs } from "node:util";
 import type { Command } from "../command";
 import { loadTeam } from "../lib/config";
 import { github } from "../lib/github";
-import { coreVersion } from "../lib/paths";
+import { repoCoreVersion } from "../lib/core";
+import { paths } from "../lib/paths";
 import { defaultBranch, git, hasRemote, houstonRepo, mustGit, withWorktree } from "../lib/repo";
 import { HoustonError, sh } from "../lib/util";
 
@@ -36,7 +37,8 @@ touched, and your checkout isn't switched.`,
     if (!from) throw new HoustonError("Where should the new core come from? Add `template: owner/name` to houston.yml, or run `houston update --from owner/name`.");
     const url = process.env.HOUSTON_TEMPLATE_URL ?? `https://github.com/${from}.git`;
     const at = values.ref ? ` at ${values.ref}` : "";
-    const installed = await coreVersion();
+    // The repo's own .houston/VERSION; houston.yml's core: when .houston/ isn't there to read.
+    const installed = existsSync(join(paths.repoCore, "VERSION")) ? repoCoreVersion() : team.core;
 
     const tmp = mkdtempSync(join(tmpdir(), "houston-update-"));
     try {

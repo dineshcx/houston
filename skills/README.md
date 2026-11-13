@@ -5,11 +5,12 @@ Houston's core skills live in `.houston/skills/` and are replaced by `houston up
 - **Override a core skill**: copy `.houston/skills/<name>/SKILL.md` to `skills/<name>/SKILL.md` and edit it. Yours wins from then on; `houston skill` marks it "(team override)".
 - **Add a new skill**: create `skills/<name>/SKILL.md` with front matter (`name`, `description`) and the steps. `houston skill <name>` finds it.
 
-Agents always ask `houston skill <name>` which file to follow, so nothing else needs changing. Check with:
+Agents get a skill's instructions from `houston skill <name>`, which prints the version that wins, so nothing else needs changing. Check with:
 
 ```sh
-.houston/bin/houston skill            # every skill and the file that wins
-.houston/bin/houston skill intake     # the file an agent follows for intake
+.houston/bin/houston skill                  # every skill, and whether yours or core's wins
+.houston/bin/houston skill intake           # the intake instructions an agent follows
+.houston/bin/houston skill intake --path    # just the file they come from
 ```
 
 To make Claude Code offer a new skill by name, also add a stub in `.claude/skills/<name>/SKILL.md` like the existing ones.

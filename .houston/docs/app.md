@@ -19,7 +19,7 @@ A cadence's pages, opening on the current period: pick the cadence (Daily standu
 - **Updates**: each member's Update from their runs, with its footer: run time, each source's health, and "not reviewed" if it published on its own. Members with no Update yet show "No update yet".
 - **Create the page** if the current period has none yet.
 
-A past period is **Frozen**: read-only, because the next one has started.
+A past period is **Frozen**: read-only, because the next one has started. Issue references like `acme/web#12` in Notes and Updates link to the issue on GitHub.
 
 ## Board
 

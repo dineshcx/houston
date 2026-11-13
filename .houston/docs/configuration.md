@@ -49,7 +49,7 @@ agents: { enabled: false }
 | --- | --- | --- | --- |
 | `houston` | yes | | `1` (the schema version this core reads) |
 | `core` | yes | | the core version the team runs, like `0.1.0`. Must match `.houston/VERSION`; `houston update` bumps it. |
-| `template` | no | | `owner/name` of the Houston template repo. Where `houston update` fetches new versions. |
+| `template` | no | | `owner/name` of the Houston template repo. Where `houston update` fetches new versions. Leave it out if the repo wasn't made from a template; `houston update --from owner/name` works without it. |
 
 ### team
 

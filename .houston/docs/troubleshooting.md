@@ -107,9 +107,11 @@ Run it again after adding a repo to `houston.yml`.
 ## The scheduler runs but nothing happens
 
 - `houston doctor` shows the last run's time and outcome. "Quiet" means nothing new since your last published run: that's normal.
-- Cron starts jobs with a bare `PATH`; if `bun`, `claude`, `gh` or `git` aren't found, use the crontab line `houston schedule` prints, which sets `PATH`.
+- Cron starts jobs with a bare `PATH`; if `bun`, `claude`, `gh` or `git` aren't found, use the crontab line `houston schedule` prints, which sets `PATH`. An agent app's scheduled task needs them on its `PATH` too.
 - The scheduler must run on your laptop. A cloud task has none of your repos or sessions.
 - "The run's agent failed": the message says why (often Claude Code not signed in). Nothing was drafted; the next run covers the same time again.
+- "The run's agent tried commands Houston doesn't allow": doctor shows the run as failed and lists the refused commands. Nothing was drafted and the next run covers the same time again. If it keeps happening, the run skill (the team's `skills/run/SKILL.md`, if it has one) is asking the agent for something other than `houston draft add` and `houston issues`.
+- "The agent found nothing worth writing": a quiet run. The agent read the evidence and saw nothing to report, so the next run starts from now.
 - "Another Houston run is in progress": a run (or `houston publish`) was already going on this laptop. That's normal when runs overlap; the next one carries on.
 - "Couldn't publish your draft": a draft reached its deadline but failed a check (a frozen period, a label Houston doesn't manage). It's held now so runs don't fail the same way; fix it with `houston draft` or throw it away with `houston draft discard`.
 

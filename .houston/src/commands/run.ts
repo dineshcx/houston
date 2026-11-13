@@ -10,11 +10,11 @@ import { DAY_NAMES, splitFrontMatter, zoned } from "../lib/cadence";
 import { loadContext, type Context } from "../lib/config";
 import { isTrusted, repoCoreVersion } from "../lib/core";
 import { discardDraft, draftStatus, publishDraft, setHeld, startDraft } from "../lib/draft";
-import { isQuiet, writeDigest } from "../lib/evidence";
+import { consumeInbox, isQuiet, writeDigest } from "../lib/evidence";
 import { dayLogFile, ensureTodayPages, myProjects, openPeriods, pageFile, stripFooter } from "../lib/pages";
 import { paths } from "../lib/paths";
 import { applyMergedProposals } from "../lib/proposals";
-import { pull } from "../lib/repo";
+import { notReady, pull } from "../lib/repo";
 import { readState, tryLock, updateState, windowStart, type State } from "../lib/state";
 import { HoustonError, clip, iso, parseDuration, sh } from "../lib/util";
 
@@ -73,7 +73,7 @@ function prompt(ctx: Context, digest: string, now: Date): string {
  * allow rules and hooks don't apply). Anything else is denied without asking. It runs in an empty
  * folder so no repo instructions load. HOUSTON_AGENT replaces `claude` (tests); the prompt is on stdin.
  */
-function startAgent(ctx: Context, text: string): { ok: boolean; note: string } {
+function startAgent(ctx: Context, text: string): { ok: boolean; note: string; denied: string[] } {
   const custom = process.env.HOUSTON_AGENT;
   const cmd = custom
     ? ["sh", "-c", custom]
@@ -87,6 +87,7 @@ function startAgent(ctx: Context, text: string): { ok: boolean; note: string } {
         "--setting-sources", "",
         "--strict-mcp-config",
         "--permission-mode", "dontAsk",
+        "--output-format", "json",
       ];
   const cwd = mkdtempSync(join(tmpdir(), "houston-run-"));
   let p: ReturnType<typeof Bun.spawnSync>;
@@ -97,8 +98,20 @@ function startAgent(ctx: Context, text: string): { ok: boolean; note: string } {
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
-  const err = `${p.stderr?.toString() ?? ""}\n${p.stdout?.toString() ?? ""}`.trim();
-  return p.exitCode === 0 ? { ok: true, note: "" } : { ok: false, note: clip(err || `exit ${p.exitCode ?? "timeout"}`, 300) };
+  const out = p.stdout?.toString() ?? "";
+  const err = `${p.stderr?.toString() ?? ""}\n${out}`.trim();
+  const denied = deniedCommands(out);
+  return p.exitCode === 0 ? { ok: true, note: "", denied } : { ok: false, note: clip(err || `exit ${p.exitCode ?? "timeout"}`, 300), denied };
+}
+
+/** Commands the agent tried that the lock-down refused, from Claude Code's JSON result. */
+function deniedCommands(stdout: string): string[] {
+  try {
+    const result = JSON.parse(stdout) as { permission_denials?: { tool_input?: { command?: string } }[] };
+    return (result.permission_denials ?? []).map((d) => clip(d.tool_input?.command ?? "a tool call", 120));
+  } catch {
+    return []; // not Claude Code's JSON (HOUSTON_AGENT in tests): nothing to report
+  }
 }
 
 function notify(message: string) {
@@ -146,6 +159,12 @@ function untrustedCore(): HoustonError {
 
 function runOnce(values: { "if-due"?: boolean }, say: (msg: string, needsYou?: boolean) => void) {
   const now = new Date();
+  // A repo on another branch or mid-rebase is the person's work in progress: don't write into it.
+  const busy = notReady();
+  if (busy) {
+    record("failed", now, { note: busy });
+    return say(`Houston didn't run: ${busy}`, true);
+  }
   const pulled = pull();
   if (!pulled.ok) say(`Couldn't pull the Houston repo (${clip(pulled.note, 200)}); carrying on with what's here.`);
   // The pull may have brought a new core or run skill: stop before anything else uses it.
@@ -155,7 +174,8 @@ function runOnce(values: { "if-due"?: boolean }, say: (msg: string, needsYou?: b
   }
   const ctx = loadContext();
   const { team, local } = ctx;
-  for (const line of applyMergedProposals(team, local.user)) say(line);
+  // Proposals are only applied from an up-to-date checkout, so a merge is never applied twice.
+  if (pulled.ok) for (const line of applyMergedProposals(team, local.user)) say(line);
 
   const last = readState().last_run;
   // A draft past its deadline publishes first, so a late laptop still makes standup.
@@ -199,6 +219,14 @@ function runOnce(values: { "if-due"?: boolean }, say: (msg: string, needsYou?: b
   draft = draftStatus();
   if (!draft?.sections.length) {
     discardDraft();
+    // Refused writes are a failure, not a quiet day: the window stays open for the next run.
+    if (agent.denied.length) {
+      record("failed", now, { note: `the agent's writes were refused: ${agent.denied.join(" | ")}`, sources: digest.sources });
+      return say(`The run's agent tried commands Houston doesn't allow, so nothing was drafted; the next run tries again.\n${agent.denied.map((c) => `  - ${c}`).join("\n")}`, true);
+    }
+    // The agent read everything and found nothing worth reporting: don't send the same evidence again.
+    consumeInbox(digest.inbox);
+    updateState((s) => (s.last_publish = iso(now)));
     record("quiet", now, { note: "the agent found nothing to write", sources: digest.sources });
     return say("The agent found nothing worth writing.");
   }

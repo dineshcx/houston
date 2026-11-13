@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import type { Command } from "../command";
 import { formatAt } from "../lib/cadence";
 import { loadLocal } from "../lib/config";
-import { addSection, discardDraft, draftStatus, SECTION_KINDS, setHeld, type Kind } from "../lib/draft";
+import { addSection, discardDraft, draftStatus, parseDraft, SECTION_KINDS, setHeld, type Kind } from "../lib/draft";
 import { paths } from "../lib/paths";
 import { HoustonError, UsageError } from "../lib/util";
 
@@ -33,6 +33,8 @@ export default {
   summary: "Show, add to, hold or discard your run's draft",
   usage: `houston draft                                         show the draft and when it publishes
 houston draft add <kind> <target> [--file f]          add or replace a section (text from the file, or stdin)
+houston draft add [--file f]                          add several sections at once, written in the draft's own
+                                                      format: each starts with <!-- houston:<kind> <target> -->
 houston draft hold | release | discard                keep it back / let it publish / throw it away
 
 kinds and targets:
@@ -49,14 +51,20 @@ kinds and targets:
       case undefined:
         return show();
       case "add": {
-        if (!kind || !target || extra) throw new UsageError("Say which section: houston draft add <day|page|summary|labels|comment> <target>, with the text on stdin.");
-        if (!SECTION_KINDS.includes(kind as Kind)) throw new UsageError(`"${kind}" isn't a draft section. Use one of: ${SECTION_KINDS.join(", ")}.`);
+        if ((kind && !target) || extra) throw new UsageError("Say which section: houston draft add <day|page|summary|labels|comment> <target>, with the text on stdin.");
+        if (kind && !SECTION_KINDS.includes(kind as Kind)) throw new UsageError(`"${kind}" isn't a draft section. Use one of: ${SECTION_KINDS.join(", ")}.`);
         // During a run the agent may only pass text on stdin, so it can't make Houston read other files.
         const inRun = !!process.env.HOUSTON_IN_RUN;
         if (inRun && values.file) throw new HoustonError("During a run, pass the section's text on stdin, not with --file.");
-        const body = values.file ? readFileSync(values.file, "utf8") : await Bun.stdin.text();
-        addSection({ kind: kind as Kind, target, body: body.trim() }, { byPerson: !inRun });
-        return console.log(`Added ${kind} ${target} to the draft.`);
+        const text = values.file ? readFileSync(values.file, "utf8") : await Bun.stdin.text();
+        const sections = kind ? [{ kind: kind as Kind, target, body: text.trim() }] : parseDraft(text);
+        if (!sections.length) throw new UsageError("No sections found. Start each one with a line like <!-- houston:day 2026-11-13 -->.");
+        // Each section is checked and added on its own; adding one again replaces it, so a retry is safe.
+        for (const s of sections) {
+          addSection(s, { byPerson: !inRun });
+          console.log(`Added ${s.kind} ${s.target} to the draft.`);
+        }
+        return;
       }
       case "hold":
         setHeld(true);

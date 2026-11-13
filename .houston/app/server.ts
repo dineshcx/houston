@@ -40,11 +40,11 @@ function context(): Ctx {
 }
 
 /**
- * Runs the houston CLI: the trusted copy when there is one, else this core. `--config` names
- * Houston's own empty bunfig.toml, so a bunfig.toml at the repo root can't preload code.
+ * Runs the houston CLI: the trusted copy when there is one, else this core, with the same
+ * guards as the shim (no .env, Houston's own bunfig.toml) so files at the repo root can't run code.
  */
 function houston(args: string[]): { ok: boolean; output: string } {
-  const cli = existsSync(paths.bin) ? [paths.bin] : [process.execPath, `--config=${join(paths.core, "bunfig.toml")}`, join(paths.core, "src/cli.ts")];
+  const cli = existsSync(paths.bin) ? [paths.bin] : [process.execPath, "--no-env-file", `--config=${join(paths.core, "bunfig.toml")}`, join(paths.core, "src/cli.ts")];
   const r = sh([...cli, ...args], { cwd: paths.root });
   return { ok: r.ok, output: [r.stdout, r.stderr].filter(Boolean).join("\n") };
 }

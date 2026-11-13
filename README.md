@@ -36,9 +36,10 @@ You need [git](https://git-scm.com), the [GitHub CLI](https://cli.github.com) (`
    cd ~/code/web-team-houston
    claude
    ```
-3. Say **"set me up"**. Answer its questions. It writes and commits `houston.yml` and your cadences, creates Houston's status, priority and kind labels in your code repos (`houston labels sync`), links your repos on this laptop, and shows you what to put in your scheduler. Push when it asks: teammates clone what you push.
-4. Put the instruction it shows in a scheduler on this laptop, at the times it suggests. It runs `.houston-local/core/bin/houston run`, your approved copy of Houston (see [Updating Houston](#updating-houston)).
-5. Send the repo link to your team.
+3. Say **"set me up"** and answer its questions. It shows you the team's setup (`houston.yml` and your cadences) to approve, then your personal plan. After your yes it links your repos on this laptop, commits the team's setup and creates Houston's status, priority and kind labels in your code repos (`houston labels sync`).
+4. When it asks, say yes to pushing: teammates clone what you push.
+5. Put the instruction it shows in a scheduler on this laptop, at the times it suggests, with `bun`, `claude`, `gh` and `git` on its `PATH`. It runs `.houston-local/core/bin/houston run`, your approved copy of Houston (see [Updating Houston](#updating-houston)).
+6. Send the repo link to your team.
 
 **Member:**
 
@@ -107,7 +108,7 @@ It edits `houston.yml` or `cadences/`, runs `houston validate`, shows you the ch
 .houston/bin/houston update
 ```
 
-It opens a pull request against your default branch that replaces `.houston/` with the newer version (from `template:` in `houston.yml`). Your setup, notes and own skills are untouched.
+It opens a pull request against your default branch that replaces `.houston/` with the newer version (from `template:` in `houston.yml`, or `--from owner/repo`). Your setup, notes and own skills are untouched.
 
 Schedulers and agents never run `.houston/` straight from the repo. They run `.houston-local/core/`, a copy each person approves with `houston trust` (gitignored, one per laptop), so a change pulled from a teammate can't run on your laptop until you've looked at it. After pulling a change to `.houston/` (or to your team's `skills/run/SKILL.md`), your runs stop and say so. Review it, then trust it:
 

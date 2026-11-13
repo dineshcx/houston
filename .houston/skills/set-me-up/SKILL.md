@@ -11,7 +11,7 @@ You are in a team's Houston repo. The `houston` CLI is `.houston/bin/houston` (b
 
 - **Look facts up yourself** (`houston doctor`, `git`, `gh`, `houston link --dry-run`, the filesystem). Bring the person decisions, never questions you could answer.
 - **Ask in numbered rounds.** Each question has your recommended answer, worded so "yes" accepts it. A question that depends on an unanswered one waits for a later round.
-- **Read only until the plan is approved.** Nothing is written, linked or committed before the person says yes to the plan in step 5.
+- **Read only until the person approves.** Nothing is written before they say yes: the team's files after step 3's approval, everything else after the plan in step 5. Nothing is committed until step 6.
 - **Never open `.env` files, keys or other secret files**, in this repo or the code repos.
 - **Pushing is the person's call.** Commit when they approve; ask before `git push`.
 - Every step ends on its **done when**. Don't move on until it holds.
@@ -45,12 +45,12 @@ Done when the person has said keep or remove for each item (removal itself happe
 
 ### 3. Team questions (first person only)
 
-Skip this step when `houston.yml` exists: the person is joining. Tell them who the team's leads are (`houston explain`) and go to step 4.
+Skip this step when `houston.yml` is committed: the person is joining. Tell them who the team's leads are (`houston explain`) and go to step 4. If it exists but isn't committed, an earlier first setup stopped part way: show it, ask what to change, and carry on from the approval below.
 
 Look up first: `gh repo list <org> --limit 100 --json nameWithOwner,pushedAt,description` for the orgs in `gh api user/orgs -q '.[].login'` and their own account. Read the presets in `.houston/presets/*/README.md`.
 
 1. **Round 1: projects and repos.** Propose projects (an id like `storefront`, a name) grouping the repos with recent pushes, each repo with a one-line `about` from its description. Ask who the leads and members are (GitHub usernames); recommend the person as the only lead.
-2. **Round 2: how the team works.** Offer the presets: daily standup, weekly sync, sprints with a KPI check (they combine). Turn plain words into cadences: "standup at 10, two-week sprints from Monday" → `daily.md` at `Mon-Fri 10:00`, `sprint.md` with `sprint_start` on a recent Monday and `sprint_length: 2w`. Ask which projects each cadence belongs to; recommend all.
+2. **Round 2: how the team works.** Offer the presets: daily standup, weekly sync, sprints with a KPI check (they combine). Turn plain words into cadences: "standup at 10, two-week sprints from Monday" → `daily.md` at `Mon-Fri 10:00`, `sprint.md` with `sprint_start` on a recent Monday and `sprint_length: 2w`. A cadence's `schedule:` is days then a 24-hour time, in the team's words: `Mon-Fri 10:00`, `Mon 09:30`, `Mon,Thu 16:00`, `daily 09:00`, `weekdays 09:00`. Ask which projects each cadence belongs to; recommend all.
 3. **Round 3: rules.** Show the default rules in sentences and ask only "anything here you'd change?":
    - Agents move issues between status columns and set priority and kind labels (`status`, `labels`: `auto` or `never`).
    - New issues are only proposed; a person approves them in an intake pull request (`create_issue`: `review` or `never`).
@@ -62,12 +62,18 @@ Look up first: `gh repo list <org> --limit 100 --json nameWithOwner,pushedAt,des
 
    Check each repo's visibility (`gh repo view <repo> --json visibility`); if any is public, recommend `summary_on_issue: false` and say why: summaries would publish private work. Houston reads GitHub activity, the person's Claude Code sessions and their inbox file; there is nothing else to connect, so don't ask about other sources.
 
-Then draft `houston.yml` and the cadences: copy the chosen preset files from `.houston/presets/<preset>/cadences/`, edited to the answers. Set `core:` to the contents of `.houston/VERSION`. Leave out anything that matches the defaults (`houston explain` shows them later). The shape:
+Then draft `houston.yml` and the cadences: copy the chosen preset files from `.houston/presets/<preset>/cadences/`, edited to the answers. Set `core:` to the contents of `.houston/VERSION`. Set `template:` to the repo this Houston repo was made from:
+
+```sh
+gh repo view <owner/name of this Houston repo> --json templateRepository -q '.templateRepository | select(. != null) | "\(.owner.login)/\(.name)"'
+```
+
+If that prints nothing, leave `template:` out; `houston update --from owner/repo` works without it. Leave out anything else that matches the defaults (`houston explain` shows them later). The shape:
 
 ```yaml
 houston: 1
 core: 0.1.0
-template: acme/houston          # where `houston update` fetches new cores, if the team made this repo from one
+template: acme/houston          # only if the command above printed one
 team: { name: Web team, leads: [ana], members: [ana, raj] }
 projects:
   storefront:
@@ -78,9 +84,9 @@ projects:
 rules: { summary_on_issue: false }   # only what differs from the defaults
 ```
 
-Nothing in this repo is written yet, so check the draft in a scratch folder: write it to `/tmp/houston-draft/houston.yml` and `/tmp/houston-draft/cadences/`, run `HOUSTON_ROOT=/tmp/houston-draft houston validate`, and fix every problem it lists.
+**Approve the team's setup.** Show the drafted `houston.yml` and each cadence's title, schedule and projects, and ask "Write these?". On yes, write `houston.yml` and `cadences/` in this repo (don't commit yet), run `houston validate`, and fix every problem it lists.
 
-Done when `houston validate` passes on the drafted `houston.yml` and cadences.
+Done when the person has approved the team's setup and `houston validate` passes.
 
 ### 4. Personal questions (everyone)
 
@@ -100,7 +106,7 @@ Show one table, then ask "Go ahead?":
 
 | What | Where |
 | --- | --- |
-| Files written | `houston.yml`, `cadences/*.md` (first person); `houston.local.yml`, `AGENTS.local.md` |
+| Files written | `houston.local.yml`, `AGENTS.local.md` |
 | Repos linked | each repo, its path, and the two hidden files (`.houston`, `.houston-inbox.md`) |
 | Global block | `~/.claude/CLAUDE.md`, between `<!-- houston:begin -->` and `<!-- houston:end -->`, listing this Houston repo |
 | Removed | what the person chose in step 2 |
@@ -112,8 +118,8 @@ Done when the person approves the plan, or has changed it and approved the new o
 ### 6. Apply
 
 1. Remove what step 2 agreed to remove.
-2. First person: write `houston.yml` and `cadences/`, run `houston validate`, then commit them (`git add houston.yml cadences && git commit -m "Set up Houston for <team>"`). Ask before pushing. Then run `houston labels sync`: it creates the status, priority and kind labels in every team repo, which must exist before any run or intake changes an issue's status.
-3. Clone any repos agreed in step 4, then run `houston link` with the `--repo` overrides from step 4. It writes the files, adds this repo to the global block, sets `commit.gpgsign false` and `core.symlinks false` in this repo, and trusts the core (which makes the copy of it that schedules run).
+2. Clone any repos agreed in step 4, then run `houston link` with the `--repo` overrides from step 4. It writes the files, adds this repo to the global block, sets `commit.gpgsign false` and `core.symlinks false` in this repo, and trusts the core (which makes the copy of it that schedules run).
+3. First person: commit the team's files (`git add houston.yml cadences && git commit -m "Set up Houston for <team>"`), then run `houston labels sync`: it creates the status, priority and kind labels in every team repo, which must exist before any run or intake changes an issue's status. Push only when the person says so; teammates can't join until it's pushed.
 4. **Schedule.** Run `houston schedule` and show the person its output. Houston doesn't install schedules: they put the one instruction it prints, exactly as printed, in a scheduler they already use, at the suggested times (their agent app's scheduled tasks, an orchestrator, cron or launchd). The instruction runs the trusted copy under `.houston-local/core/`, never `.houston/bin/houston`, so a core change someone pushes doesn't run until the person trusts it. If you have a scheduler tool yourself, offer to create the task, on this machine and never in the cloud: the run needs this laptop's repos and sessions. Once it exists, record it in one sentence naming the scheduler, the task's name and when it runs: `houston schedule --set "T3 Code task 'Houston run', Mon–Fri 09:00, 09:45, 12:00, 15:00, 18:00 Asia/Kolkata"`.
 5. Run `houston doctor`.
 

@@ -25,7 +25,7 @@ Docs for people are in `.houston/docs/` (concepts, configuration, CLI, runs, int
 
 ## Skills
 
-Before starting one of these jobs, run `houston skill <name>` and follow the file it prints. It prints the team's `skills/<name>/SKILL.md` when there is one, otherwise the core skill.
+Before starting one of these jobs, run `houston skill <name>` and follow the instructions it prints. They are the team's `skills/<name>/SKILL.md` when there is one, otherwise the core skill.
 
 - **set-me-up**: "set me up", first person or new member; "I cloned a new repo", "show me my schedule", "stop my runs".
 - **change-setup**: changing how the team works: cadences, times, sprints, repos, people, rules.

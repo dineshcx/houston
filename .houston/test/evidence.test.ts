@@ -1,7 +1,7 @@
 // Evidence: the fixed matching order, exact-path session reading, inbox consumption, failed sources,
 // and which GitHub events count as work.
 import { beforeAll, describe, expect, test } from "bun:test";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validateTeam, type Local, type Team } from "../src/lib/config";
@@ -114,6 +114,20 @@ describe("collect", () => {
     appendFileSync(file, "- 11:00 added later\n");
     consumeInbox(digest.inbox);
     expect(readFileSync(file, "utf8")).toBe("- 11:00 added later\n");
+  });
+
+  test("an inbox that is a symlink is never read or emptied", () => {
+    // A code repo could commit .houston-inbox.md as a link to the person's credentials.
+    const other = join(tmp, "linked");
+    mkdirSync(other);
+    Bun.spawnSync(["git", "init", "-q", other]);
+    const secret = join(tmp, "secret.txt");
+    writeFileSync(secret, "token=abc\n");
+    symlinkSync(secret, join(other, ".houston-inbox.md"));
+    const d = collect(team, { ...local, repos: { "acme/web": other, "acme/api": null } }, since);
+    expect(JSON.stringify(d.items)).not.toContain("token=abc");
+    consumeInbox([{ file: join(other, ".houston-inbox.md"), lines: ["token=abc"] }]);
+    expect(readFileSync(secret, "utf8")).toBe("token=abc\n");
   });
 
   test("a failed source is recorded and the others still run", () => {

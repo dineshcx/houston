@@ -37,7 +37,7 @@ export interface GitHub {
   activity(user: string, repos: string[], since: Date): Activity[];
   issues(repo: string, opts?: { assignee?: string; label?: string; state?: "open" | "all" }): Issue[];
   issue(ref: IssueRef): Issue;
-  pullRequests(repo: string, opts?: { author?: string; label?: string; state?: "open" | "all" }): PullRequest[];
+  pullRequests(repo: string, opts?: { label?: string; state?: "open" | "all" }): PullRequest[];
   setBody(ref: IssueRef, body: string): void;
   editLabels(ref: IssueRef, add: string[], remove: string[]): void;
   ensureLabel(repo: string, name: string, color: string, description: string): void;
@@ -46,7 +46,6 @@ export interface GitHub {
   addSubIssue(parent: IssueRef, child: IssueRef): void;
   createPullRequest(repo: string, pr: { head: string; base: string; title: string; body: string; labels?: string[] }): string;
   mergePullRequest(repo: string, number: number): void;
-  visibility(repo: string): "public" | "private" | "internal";
 }
 
 const REF = /^([\w.-]+\/[\w.-]+)#(\d+)$/;
@@ -168,9 +167,8 @@ class GhGitHub implements GitHub {
     };
   }
 
-  pullRequests(repo: string, opts: { author?: string; label?: string; state?: "open" | "all" } = {}): PullRequest[] {
+  pullRequests(repo: string, opts: { label?: string; state?: "open" | "all" } = {}): PullRequest[] {
     const args = ["pr", "list", "-R", repo, "--state", opts.state ?? "open", "--limit", "100", "--json", "number,title,body,state,url,headRefName,author,labels,updatedAt"];
-    if (opts.author) args.push("--author", opts.author);
     if (opts.label) args.push("--label", opts.label);
     return json<any[]>(gh(args)).map((p) => ({
       repo,
@@ -227,9 +225,6 @@ class GhGitHub implements GitHub {
     gh(["pr", "merge", String(number), "-R", repo, "--merge", "--delete-branch"]);
   }
 
-  visibility(repo: string) {
-    return lower(gh(["api", `repos/${repo}`, "-q", ".visibility"])) as "public" | "private" | "internal";
-  }
 }
 
 /** Search queries: `terms` plus repo: qualifiers, split so none passes GitHub's 256-character limit. */
@@ -275,7 +270,6 @@ export type FakeData = {
   pulls: PullRequest[];
   labels: Record<string, string[]>;
   subIssues: string[][];
-  visibility: Record<string, "public" | "private" | "internal">;
   /** Every write, in order, so tests can assert on them. */
   writes: string[];
 };
@@ -285,7 +279,7 @@ export class FakeGitHub implements GitHub {
 
   private read(): FakeData {
     const d = existsSync(this.file) ? JSON.parse(readFileSync(this.file, "utf8")) : {};
-    return { login: "me", activity: [], issues: [], pulls: [], labels: {}, subIssues: [], visibility: {}, writes: [], ...d };
+    return { login: "me", activity: [], issues: [], pulls: [], labels: {}, subIssues: [], writes: [], ...d };
   }
   private write(d: FakeData, note: string) {
     d.writes.push(note);
@@ -316,9 +310,9 @@ export class FakeGitHub implements GitHub {
   issue(ref: IssueRef) {
     return this.find(this.read(), ref);
   }
-  pullRequests(repo: string, opts: { author?: string; label?: string; state?: "open" | "all" } = {}) {
+  pullRequests(repo: string, opts: { label?: string; state?: "open" | "all" } = {}) {
     return this.read().pulls.filter(
-      (p) => lower(p.repo) === lower(repo) && (opts.state === "all" || p.state === "open") && (!opts.author || p.author === opts.author) && (!opts.label || p.labels.includes(opts.label)),
+      (p) => lower(p.repo) === lower(repo) && (opts.state === "all" || p.state === "open") && (!opts.label || p.labels.includes(opts.label)),
     );
   }
   setBody(ref: IssueRef, body: string) {
@@ -376,9 +370,6 @@ export class FakeGitHub implements GitHub {
     if (!p) throw new HoustonError(`${refText({ repo, number })} is not a pull request.`);
     p.state = "merged";
     this.write(d, `merge ${refText({ repo, number })}`);
-  }
-  visibility(repo: string) {
-    return this.read().visibility[repo] ?? "private";
   }
 }
 
