@@ -82,6 +82,8 @@ export function createNoteEditor({ element, markdown, editable, placeholder = ""
   const editor = new Editor({
     element,
     editable,
+    // The app's CSP forbids inline <style>; the few ProseMirror base rules TipTap would inject are in style.css.
+    injectCSS: false,
     contentType: "markdown",
     content: markdown,
     extensions: extensions(renderChip, placeholder),

@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Houston's local app: one page, hash-routed screens rendered by app.js. -->
+<!-- Houston's local app: one page, hash-routed screens rendered by js/app.js. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -7,31 +7,28 @@
     <meta name="color-scheme" content="light dark" />
     <title>Houston</title>
     <link rel="icon" href="data:," />
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="/style.css" />
-    <script type="module" src="/app.js"></script>
+    <link rel="modulepreload" href="/js/ui.js" />
+    <link rel="modulepreload" href="/js/api.js" />
+    <script type="module" src="/js/app.js"></script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
-    <div class="shell">
-      <nav class="rail" aria-label="Screens">
-        <div class="who">
-          <div class="team" id="team">Houston</div>
-          <div class="login" id="login"></div>
-          <div class="fresh" id="fresh"></div>
-        </div>
-        <h2>Pages</h2>
-        <ul id="pages-nav"></ul>
-        <ul>
-          <li><a href="#/board">Board</a></li>
-          <li><a href="#/review">Review</a></li>
-          <li><a href="#/draft">My draft</a></li>
-          <li><a href="#/people">People</a></li>
-          <li><a href="#/setup">Setup</a></li>
-        </ul>
+    <div class="app" id="app">
+      <nav class="side" aria-label="Houston">
+        <div class="side-inner" id="side"></div>
+        <div class="resizer" data-resize="side" title="Drag to resize, double-click to reset"></div>
       </nav>
-      <main id="main" tabindex="-1"></main>
+      <main class="main" id="main" tabindex="-1"></main>
+      <aside class="detail" id="detail" aria-label="Issue" hidden>
+        <div class="resizer" data-resize="detail" title="Drag to resize, double-click to reset"></div>
+        <div class="detail-body" id="detail-body"></div>
+      </aside>
     </div>
-    <aside id="panel" class="panel" hidden aria-labelledby="panel-title"></aside>
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div class="detail-scrim" id="detail-scrim" hidden></div>
+    <div id="flash" aria-live="assertive"></div>
+    <div id="overlay"></div>
+    <div id="toast" role="status" aria-live="polite"></div>
   </body>
 </html>

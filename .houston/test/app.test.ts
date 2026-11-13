@@ -214,6 +214,40 @@ describe("guards", () => {
   });
 });
 
+// The frontend (app/public, minus the vendored editor) is plain ES modules served under a strict CSP:
+// no inline scripts, no style="" attributes, no external images. These catch a slip before a browser does.
+describe("frontend files", () => {
+  const pub = join(import.meta.dir, "../app/public");
+  const files = [...new Bun.Glob("**/*.{js,html}").scanSync(pub)].filter((f) => !f.startsWith("vendor/"));
+
+  test("index.html loads only same-origin scripts, the theme script first", async () => {
+    const r = await fetch(`${base}/`);
+    expect(r.headers.get("content-security-policy")).toContain("default-src 'self'");
+    const page = await r.text();
+    expect(page).not.toMatch(/<script(?![^>]*\ssrc=)[^>]*>/); // every <script> has a src
+    expect(page.indexOf("/theme.js")).toBeLessThan(page.indexOf("/style.css"));
+  });
+
+  test("no file relies on what the CSP blocks", () => {
+    for (const f of files) {
+      const code = readFileSync(join(pub, f), "utf8").split("\n").filter((l) => !/^\s*(\/\/|<!--)/.test(l)).join("\n");
+      expect({ f, inlineStyle: /\sstyle=["'$]/.test(code) }).toEqual({ f, inlineStyle: false });
+      expect({ f, remoteImage: /<img[^>]+src=["']https?:/.test(code) }).toEqual({ f, remoteImage: false });
+    }
+  });
+
+  test("every module the app imports exists and is served", async () => {
+    for (const f of files.filter((x) => x.endsWith(".js"))) {
+      const code = readFileSync(join(pub, f), "utf8");
+      for (const m of code.matchAll(/(?:import\(|from )\s*["'](\.{1,2}\/[^"']+|\/[^"']+)["']/g)) {
+        const url = m[1].startsWith("/") ? m[1] : new URL(m[1], `http://x/${f}`).pathname;
+        const r = await fetch(base + url);
+        expect({ f, url, status: r.status }).toEqual({ f, url, status: 200 });
+      }
+    }
+  });
+});
+
 describe("board", () => {
   test("issues are grouped by the team's columns, with a No status column for the rest", async () => {
     const { body } = await get("/api/board");
