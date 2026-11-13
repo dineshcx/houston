@@ -3,6 +3,7 @@
 // marked summary block, and never over a person's fresh edit.
 import { STATUSES, PRIORITIES, teamRepos, type Team } from "./config";
 import { github, refText, type IssueRef } from "./github";
+import { hash, updateState } from "./state";
 import { HoustonError } from "./util";
 
 export const SUMMARY_START = "<!-- houston:summary -->";
@@ -75,6 +76,24 @@ export function readSummary(body: string): string | undefined {
   const s = body.indexOf(SUMMARY_START);
   const e = body.indexOf(SUMMARY_END);
   return s >= 0 && e > s ? body.slice(s + SUMMARY_START.length, e).trim() : undefined;
+}
+
+/** How Houston remembers a comment it posted: the issue plus a hash of the text. */
+export const commentKey = (ref: IssueRef, body: string) => `${refText(ref).toLowerCase()} ${hash(body.trim())}`;
+
+/** Comments are forgotten after this; by then they're far behind any run's window. */
+const REMEMBER_MS = 14 * 86_400_000;
+
+/**
+ * Posts a comment as the person and remembers it, so the next run doesn't mistake Houston's own
+ * comment for the person's work (and call the model for nothing).
+ */
+export function postComment(ref: IssueRef, body: string, now = new Date()) {
+  github().comment(ref, body);
+  updateState((s) => {
+    const keep = (s.posted_comments ?? []).filter((c) => now.getTime() - Date.parse(c.at) < REMEMBER_MS);
+    s.posted_comments = [...keep, { key: commentKey(ref, body), at: now.toISOString() }];
+  });
 }
 
 /** The issue body with the summary block taken out: the part people wrote. */

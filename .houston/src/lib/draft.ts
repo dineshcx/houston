@@ -7,7 +7,7 @@ import { formatAt, isDate, nextOccurrence, periodOf, zoned } from "./cadence";
 import { loadContext, type Context } from "./config";
 import { consumeInbox, type InboxBatch } from "./evidence";
 import { github, parseRef, refText } from "./github";
-import { assertTeamRepo, planLabels, SUMMARY_END, SUMMARY_START, writeLabels, writeSummary } from "./issues";
+import { assertTeamRepo, planLabels, postComment, SUMMARY_END, SUMMARY_START, writeLabels, writeSummary } from "./issues";
 import { dayLogFile, footer, myProjects, pageFile, stripFooter, writeInRepo } from "./pages";
 import { paths } from "./paths";
 import { commitAndPush, notReady } from "./repo";
@@ -250,7 +250,7 @@ export function publishDraft(opts: { notReviewed?: boolean; now?: Date } = {}): 
         const p = writeLabels(team, ref, parseLabels(s.body).add, parseLabels(s.body).remove);
         done.push(`${refText(ref)}: labels ${[...p.add.map((l) => `+${l}`), ...p.remove.map((l) => `-${l}`)].join(" ") || "unchanged"}`);
       } else if (!commented.has(s.target)) {
-        gh.comment(ref, s.body);
+        postComment(ref, s.body, now);
         commented.add(s.target);
         updateState((x) => (x.draft!.commented = [...commented]));
         done.push(`${refText(ref)}: commented`);

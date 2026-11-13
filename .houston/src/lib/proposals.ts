@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { basename, dirname, join, relative } from "node:path";
 import { Checker, LOGIN, PRIORITIES, readYaml, STATUSES, type Team } from "./config";
 import { github, parseRef, refText, type IssueRef } from "./github";
-import { ISSUE_KINDS, SUMMARY_END, SUMMARY_START, assertTeamRepo, readSummary, replaceSummary, writeLabels, writeSummary } from "./issues";
+import { ISSUE_KINDS, SUMMARY_END, SUMMARY_START, assertTeamRepo, postComment, readSummary, replaceSummary, writeLabels, writeSummary } from "./issues";
 import { writeInRepo } from "./pages";
 import { paths } from "./paths";
 import { commitAndPush, defaultBranch, git, houstonRepo, notReady } from "./repo";
@@ -269,7 +269,7 @@ function applyChange(team: Team, p: Proposal, i: number, results: string[]) {
     if (team.rules.issue_comment === "none") return void (results[i] = `skipped comment on ${c.issue}: rules.issue_comment is none`);
     const ref = parseRef(c.issue);
     assertTeamRepo(team, ref.repo);
-    gh.comment(ref, c.body);
+    postComment(ref, c.body);
     results[i] = `commented on ${c.issue}`;
   }
 }
@@ -329,7 +329,7 @@ function commentOnPr(name: string, me: string, results: string[]): string | unde
       .find((x) => x.branch === `intake/${name}`);
     if (!pr) return;
     const body = [`Applied by @${me}:`, "", ...(results.length ? results.map((r, i) => `${i + 1}. ${r}`) : ["No issue changes; the notes are in."])].join("\n");
-    github().comment(pr, body);
+    postComment(pr, body);
   } catch (e) {
     // The changes are made and recorded; a missing PR comment isn't worth failing over.
     return `couldn't comment on the pull request: ${message(e)}`;

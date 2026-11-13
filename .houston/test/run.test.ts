@@ -138,6 +138,24 @@ describe("houston run", () => {
     expect(h.state().last_run.outcome).toBe("quiet");
   }, 60_000);
 
+  test("Houston's own comment doesn't count as new work on the next run", () => {
+    const h = setup();
+    h.cli(["run"]);
+    const blocker = "Blocked until the API returns retry-after.";
+    expect(h.cli(["draft", "add", "comment", "acme/web#12"], blocker).err).toBe("");
+    expect(h.cli(["publish"]).err).toBe("");
+    expect(h.github().issues[0].comments).toEqual([blocker]);
+    // GitHub reports the comment as the person's activity, after the published window.
+    const later = new Date(Date.now() + 1000).toISOString();
+    h.setGithub((d) => (d.activity = [{ at: later, repo: "acme/web", kind: "commented", number: 12, text: blocker }]));
+    expect(h.cli(["run"]).out).toContain("Nothing new");
+    expect(h.agentCalls()).toBe(1);
+    // A comment the person wrote themselves still counts.
+    h.setGithub((d) => d.activity.push({ at: later, repo: "acme/web", kind: "commented", number: 12, text: "Talked to Raj, unblocked" }));
+    h.cli(["run"]);
+    expect(h.agentCalls()).toBe(2);
+  }, 60_000);
+
   test("a draft past its deadline publishes, marked not reviewed", () => {
     const h = setup();
     h.cli(["run"]);

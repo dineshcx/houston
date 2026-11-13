@@ -27,6 +27,11 @@ export type State = {
     /** Issues already commented on by an earlier, interrupted publish, so a retry doesn't comment twice. */
     commented?: string[];
   };
+  /**
+   * Comments Houston posted as this person ("owner/repo#n" + hash of the body), with when. GitHub
+   * shows them as the person's own activity; the next collect skips them so they don't count as work.
+   */
+  posted_comments?: { key: string; at: string }[];
   /** Hash of .houston/ (and the team's run skill) the person last approved; a changed core won't run unattended. */
   trusted_core?: string;
   /** The Houston repo's commit when the person last trusted the core, to show what changed since. */

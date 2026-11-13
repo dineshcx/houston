@@ -7,9 +7,9 @@ import { join } from "node:path";
 import { formatAt } from "./cadence";
 import { projectOf, teamRepos, type Local, type Team } from "./config";
 import { github, refText } from "./github";
-import { readSummary } from "./issues";
+import { commentKey, readSummary } from "./issues";
 import { IN_CODE_REPO, paths } from "./paths";
-import type { SourceHealth } from "./state";
+import { readState, type SourceHealth } from "./state";
 import { clip, home, iso, sh } from "./util";
 
 export type Evidence = {
@@ -79,8 +79,12 @@ export function collect(team: Team, local: Local, since: Date, now = new Date())
 
   try {
     const gh = github();
+    // Houston's own comments come back as the person's activity: leave them out.
+    const posted = new Set((readState().posted_comments ?? []).map((c) => c.key));
+    const ours = (a: { kind: string; repo: string; number?: number; text: string }) =>
+      a.kind === "commented" && a.number !== undefined && posted.has(commentKey({ repo: a.repo, number: a.number }, a.text));
     for (const a of gh.activity(local.user, repos, since))
-      d.items.push({ source: "github", repo: a.repo, kind: a.kind, at: a.at, branch: a.branch, number: a.number, text: a.text });
+      if (!ours(a)) d.items.push({ source: "github", repo: a.repo, kind: a.kind, at: a.at, branch: a.branch, number: a.number, text: a.text });
     for (const repo of repos)
       for (const i of gh.issues(repo, { assignee: local.user }))
         d.assigned.push({ ref: refText(i), title: i.title, labels: i.labels, hasSummary: readSummary(i.body) !== undefined });

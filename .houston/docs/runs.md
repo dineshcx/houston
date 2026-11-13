@@ -15,7 +15,7 @@ Your scheduler runs it as `.houston-local/core/bin/houston run`, the copy of Hou
 7. **Wait for you** if your draft is held or you edited it: the run won't replace your work. It says so and stops.
 8. **Make today's pages.** Creates `_page.md` (the Notes) for every cadence period open today, if missing.
 9. **Collect** your evidence since your last published run (or the last 24 hours), and write the digest to `.houston-local/digest.md`.
-10. **Skip if quiet.** If nothing new happened, it records a quiet run and stops without calling a model.
+10. **Skip if quiet.** If nothing new happened, it records a quiet run and stops without calling a model. Houston's own writes don't count as new: label and summary changes are ignored, and so are comments Houston posted for you (it remembers them for two weeks).
 11. **Draft.** Starts Claude Code headless (`claude -p`, model `runs.model`, at most `runs.max_turns` turns, 10 minutes at most) with the run skill, this run's facts, the current content of your files, and the digest. It's locked down: it runs in an empty temporary folder, its only tool is the shell, and the only commands allowed are the trusted copy's `houston draft add` (text on stdin, not `--file`) and `houston issues`. It can't read files, has no MCP servers, and none of your user or project Claude Code settings (allow rules, hooks) apply. It writes the whole draft in one `houston draft add` call, every section in the draft's own format (`<!-- houston:<kind> <target> -->` lines); each section is checked as it's added.
 12. **Publish or wait**, per `rules.publish_runs`:
     - `auto`: publishes now.
