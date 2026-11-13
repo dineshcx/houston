@@ -107,7 +107,7 @@ bun run build:editor          # writes vendor/editor.js and vendor/editor.sha256
 bun test test/app.test.ts     # rebuilds it and checks the hash and the markdown round trip
 ```
 
-Commit both files. The test rebuilds the bundle and compares hashes, so a reviewer can trust the blob matches the source without reading it; it's skipped (with a message) when the devDependencies aren't installed. The build is reproducible for the same Bun version and lockfile; a different Bun can produce different bytes, so rebuild with the Bun version CI uses.
+Commit both files. The test rebuilds the bundle and compares hashes, so a reviewer can trust the blob matches the source without reading it; it's skipped (with a message) when the devDependencies aren't installed. The build is reproducible for the same Bun version and lockfile; a different Bun can produce different bytes, so rebuild with the Bun version pinned in `.houston/.bun-version` (CI installs that one; on any other version the rebuild check is skipped with a message). Bump that file when you rebuild with a newer Bun.
 
 ## Adding a command
 

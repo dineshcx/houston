@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+        with:
+          # The same Bun that built the vendored editor bundle, so the rebuild check is byte for byte.
+          bun-version-file: .houston/.bun-version
 
       - name: Validate houston.yml and cadences
         # The template has no houston.yml yet; "set me up" writes it.
@@ -22,4 +25,4 @@ jobs:
 
       - name: Test and typecheck the core
         working-directory: .houston
-        run: bun install && bun test && bunx tsc --noEmit -p .
+        run: bun install --frozen-lockfile && bun test && bunx tsc --noEmit -p .

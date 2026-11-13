@@ -366,8 +366,12 @@ describe("draft", () => {
 const haveTiptap = existsSync(join(import.meta.dir, "../node_modules/@tiptap/core/package.json"));
 if (!haveTiptap) console.warn("Skipping the editor bundle tests: the TipTap devDependencies aren't installed. Run `bun install` in .houston.");
 
+// Bundles are only byte-identical with the same Bun, pinned in .houston/.bun-version (CI uses it too).
+const pinnedBun = readFileSync(join(import.meta.dir, "../.bun-version"), "utf8").trim();
+if (haveTiptap && Bun.version !== pinnedBun) console.warn(`Skipping the editor rebuild check: it needs Bun ${pinnedBun} (this is ${Bun.version}).`);
+
 describe("editor bundle", () => {
-  test.skipIf(!haveTiptap)("rebuilding it from source gives the committed file, byte for byte", async () => {
+  test.skipIf(!haveTiptap || Bun.version !== pinnedBun)("rebuilding it from source gives the committed file, byte for byte", async () => {
     const { buildEditor, sha256 } = await import("../app/editor/build");
     const committed = readFileSync(join(import.meta.dir, "../app/public/vendor/editor.sha256"), "utf8").split(" ")[0];
     expect(sha256(readFileSync(join(import.meta.dir, "../app/public/vendor/editor.js"), "utf8"))).toBe(committed);
