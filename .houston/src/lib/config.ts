@@ -2,6 +2,7 @@
 // The validator is the schema: unknown keys are refused, so a typo never silently turns a feature off,
 // and every error is written in plain words for whoever (or whichever agent) edits the file.
 import { existsSync, readFileSync } from "node:fs";
+import { loadCadences, type Cadence } from "./cadence";
 import { paths } from "./paths";
 import { HoustonError, parseDuration } from "./util";
 
@@ -15,10 +16,8 @@ export const PRIORITIES = ["p0", "p1", "p2", "p3"] as const;
 export type Rules = {
   status: "auto" | "never";
   labels: "auto" | "never";
-  assign_self: "auto" | "never";
-  create_issue: "auto" | "review" | "never";
-  sub_issues: "auto" | "with_owner" | "never";
-  close_issue: "auto" | "never";
+  create_issue: "review" | "never";
+  sub_issues: "auto" | "never";
   issue_comment: "none" | "blockers_only" | "summary_changes";
   summary_on_issue: boolean;
   publish_runs: "auto" | "review" | "review_until_deadline";
@@ -27,7 +26,6 @@ export type Rules = {
 
 export type Repo = { repo: string; about?: string };
 export type Project = { name: string; repos: Repo[]; cadences: string[] };
-export type Source = { kind: "github" | "transcript" | "slack" | "email"; channel?: string; trigger?: "reaction" | "all"; emoji?: string };
 
 export type Team = {
   houston: number;
@@ -37,7 +35,6 @@ export type Team = {
   projects: Record<string, Project>;
   status: { columns: { label: Status; name: string }[] };
   priority: Record<(typeof PRIORITIES)[number], string>;
-  sources: Record<string, Source>;
   rules: Rules;
   runs: { every: string; model: string; max_turns: number };
   agents: { enabled: boolean };
@@ -55,10 +52,8 @@ export type Local = {
 export const DEFAULT_RULES: Rules = {
   status: "auto",
   labels: "auto",
-  assign_self: "auto",
   create_issue: "review",
-  sub_issues: "with_owner",
-  close_issue: "never",
+  sub_issues: "auto",
   issue_comment: "blockers_only",
   summary_on_issue: true,
   publish_runs: "review_until_deadline",
@@ -75,7 +70,6 @@ const DEFAULTS = {
     ],
   },
   priority: { p0: "Urgent", p1: "High", p2: "Medium", p3: "Low" },
-  sources: { github: { kind: "github" } },
   runs: { every: "3h", model: "haiku", max_turns: 12 },
   agents: { enabled: false },
 };
@@ -83,23 +77,20 @@ const DEFAULTS = {
 const RULE_CHOICES: Record<keyof Rules, readonly unknown[] | "duration"> = {
   status: ["auto", "never"],
   labels: ["auto", "never"],
-  assign_self: ["auto", "never"],
-  create_issue: ["auto", "review", "never"],
-  sub_issues: ["auto", "with_owner", "never"],
-  close_issue: ["auto", "never"],
+  create_issue: ["review", "never"],
+  sub_issues: ["auto", "never"],
   issue_comment: ["none", "blockers_only", "summary_changes"],
   summary_on_issue: [true, false],
   publish_runs: ["auto", "review", "review_until_deadline"],
   publish_deadline: "duration",
 };
 
-const REPO = /^[\w.-]+\/[\w.-]+$/;
-const LOGIN = /^[A-Za-z0-9-]+$/;
+export const REPO = /^[\w.-]+\/[\w.-]+$/;
+export const LOGIN = /^[A-Za-z0-9-]+$/;
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 
-// ---------- a tiny checker that collects every problem instead of stopping at the first ----------
-
-class Checker {
+/** Validates parsed YAML, collecting every problem in plain words instead of stopping at the first. */
+export class Checker {
   errors: string[] = [];
   fail(path: string, msg: string) {
     this.errors.push(`${path}: ${msg}`);
@@ -133,7 +124,7 @@ class Checker {
 /** Checks a parsed houston.yml. Returns the team with defaults filled in, or every problem found. */
 export function validateTeam(raw: unknown, cadenceNames?: string[]): { team?: Team; errors: string[] } {
   const c = new Checker();
-  const top = c.obj(raw, "", ["houston", "core", "template", "team", "projects", "status", "priority", "sources", "rules", "runs", "agents"]);
+  const top = c.obj(raw, "", ["houston", "core", "template", "team", "projects", "status", "priority", "rules", "runs", "agents"]);
   if (raw === null || typeof raw !== "object") return { errors: ["houston.yml is empty or not a map of keys to values"] };
 
   if (top.houston !== SCHEMA_VERSION) c.fail("houston", `should be ${SCHEMA_VERSION} (the schema version this core reads)`);
@@ -178,16 +169,6 @@ export function validateTeam(raw: unknown, cadenceNames?: string[]): { team?: Te
   const prRaw = c.obj(top.priority, "priority", [...PRIORITIES]);
   const priority = { ...DEFAULTS.priority, ...prRaw } as Team["priority"];
 
-  const sources: Record<string, Source> = {};
-  const srcRaw = top.sources === undefined ? DEFAULTS.sources : c.obj(top.sources, "sources", Object.keys((top.sources as object) ?? {}));
-  for (const [id, s] of Object.entries(srcRaw)) {
-    const so = c.obj(s, `sources.${id}`, ["kind", "channel", "trigger", "emoji"]);
-    const kind = c.oneOf(so.kind, `sources.${id}.kind`, ["github", "transcript", "slack", "email"] as const);
-    if (kind === "slack") c.str(so.channel, `sources.${id}.channel`);
-    if (so.trigger !== undefined) c.oneOf(so.trigger, `sources.${id}.trigger`, ["reaction", "all"]);
-    sources[id] = so as Source;
-  }
-
   const rulesRaw = c.obj(top.rules, "rules", Object.keys(RULE_CHOICES));
   const rules = { ...DEFAULT_RULES } as Record<string, unknown>;
   for (const [k, v] of Object.entries(rulesRaw)) {
@@ -225,7 +206,6 @@ export function validateTeam(raw: unknown, cadenceNames?: string[]): { team?: Te
       projects,
       status: { columns },
       priority,
-      sources,
       rules: rules as Rules,
       runs,
       agents,
@@ -233,7 +213,8 @@ export function validateTeam(raw: unknown, cadenceNames?: string[]): { team?: Te
   };
 }
 
-function readYaml(path: string, what: string): unknown {
+/** Parses a YAML file, or throws a plain-words error naming it. */
+export function readYaml(path: string, what = path): unknown {
   try {
     return Bun.YAML.parse(readFileSync(path, "utf8"));
   } catch (e) {
@@ -283,4 +264,12 @@ export function teamRepos(team: Team): { repo: string; project: string; about?: 
 
 export function projectOf(team: Team, repo: string): string | undefined {
   return teamRepos(team).find((r) => r.repo.toLowerCase() === repo.toLowerCase())?.project;
+}
+
+/** Everything most commands need: the team, its cadences and this person's settings. */
+export type Context = { team: Team; cadences: Record<string, Cadence>; local: Local };
+
+export function loadContext(): Context {
+  const cadences = loadCadences();
+  return { team: loadTeam(paths.team, Object.keys(cadences)), cadences, local: loadLocal() };
 }

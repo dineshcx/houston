@@ -57,6 +57,13 @@ export function readSummary(body: string): string | undefined {
   return s >= 0 && e > s ? body.slice(s + SUMMARY_START.length, e).trim() : undefined;
 }
 
+/** The issue body with the summary block taken out: the part people wrote. */
+export function withoutSummary(body: string): string {
+  const s = body.indexOf(SUMMARY_START);
+  const e = body.indexOf(SUMMARY_END);
+  return s >= 0 && e > s ? (body.slice(0, s) + body.slice(e + SUMMARY_END.length)).trim() : body.trim();
+}
+
 /** Replaces the summary block, or puts one at the top. Everything outside the markers is kept byte for byte. */
 export function replaceSummary(body: string, summary: string): string {
   if (summary.includes(SUMMARY_START) || summary.includes(SUMMARY_END)) throw new HoustonError("A summary can't contain the houston:summary markers itself.");

@@ -1,7 +1,11 @@
 // Small helpers every command uses: running processes, user-facing errors, durations.
+import { homedir } from "node:os";
 
 /** An error meant for the person running Houston: printed without a stack trace. */
 export class HoustonError extends Error {}
+
+/** A command was called the wrong way. The CLI adds a pointer to `houston help <command>`. */
+export class UsageError extends HoustonError {}
 
 export type Result = { ok: boolean; code: number; stdout: string; stderr: string };
 
@@ -37,5 +41,8 @@ export function clip(text: unknown, n: number): string {
   const t = String(text ?? "").replace(/\s+/g, " ").trim();
   return t.length <= n ? t : t.slice(0, n - 1) + "…";
 }
+
+/** The person's home folder (HOME is overridden in tests). */
+export const home = () => process.env.HOME ?? homedir();
 
 export const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, "Z");

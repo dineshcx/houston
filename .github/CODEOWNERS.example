@@ -1,0 +1,18 @@
+# Who must review changes to the parts of this repo that run on everyone's laptop.
+#
+# Why: every teammate's scheduler runs the code in .houston/ unattended, and runs follow the
+# setup and skills/. Anyone who can push here unreviewed can run code on every teammate's
+# laptop through their runs.
+#
+# To use it:
+# 1. Rename this file to CODEOWNERS and replace @your-org/leads with your leads (a team or usernames).
+# 2. Turn on protection for these paths so changes need a reviewed pull request: in the repo's
+#    Settings → Rules, add a ruleset that restricts pushes touching them, with your leads allowed
+#    to bypass, and require review from Code Owners on pull requests.
+#    Don't require pull requests for the whole default branch: runs push pages and day logs to it
+#    directly, and would be refused.
+
+/.houston/     @your-org/leads
+/houston.yml   @your-org/leads
+/cadences/     @your-org/leads
+/skills/       @your-org/leads

@@ -3,6 +3,7 @@
 // A period is identified by its first day (YYYY-MM-DD), which keeps folders sortable for every kind.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import type { Team } from "./config";
 import { paths } from "./paths";
 import { HoustonError, parseDuration } from "./util";
 
@@ -22,7 +23,7 @@ export type Cadence = {
   page: string;
 };
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DEFAULT_PAGE = "# {{title}}, {{period}}\n\n## Agenda\n\n## Notes\n\n## Decisions\n\n## Action items\n";
 
 /** "Mon-Fri 10:00", "Mon 09:30", "Mon,Thu 16:00", "daily 09:00" */
@@ -66,6 +67,17 @@ export function zoned(at: Date, tz: string): { date: string; weekday: number; ti
       .map((p) => [p.type, p.value]),
   );
   return { date: `${parts.year}-${parts.month}-${parts.day}`, weekday: DAY_NAMES.indexOf(parts.weekday), time: `${parts.hour}:${parts.minute}` };
+}
+
+/** "2026-11-13 09:30", in the person's timezone. The one way Houston shows a time. */
+export function formatAt(at: Date | string, tz: string): string {
+  const z = zoned(new Date(at), tz);
+  return `${z.date} ${z.time}`;
+}
+
+/** True for a real calendar date written YYYY-MM-DD. */
+export function isDate(text: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) && new Date(`${text}T00:00:00Z`).toISOString().startsWith(text);
 }
 
 /** The instant a wall-clock time happens in a timezone (DST-safe for any time that exists). */
@@ -180,11 +192,14 @@ export function parseCadence(name: string, text: string): Cadence {
   return { name, title: String(data.title ?? name), schedule: schedule!, period, sprint, writers, template: body.trim(), page };
 }
 
+/** cadences/<name>.md, where name is a lowercase id. Anything else there (a README) is ignored. */
+export const isCadenceFile = (f: string) => /^[a-z0-9][a-z0-9-]*\.md$/.test(f);
+
 /** All cadences in cadences/, by name. */
 export function loadCadences(dir = paths.cadences): Record<string, Cadence> {
   if (!existsSync(dir)) return {};
   const out: Record<string, Cadence> = {};
-  for (const f of readdirSync(dir).filter((f) => f.endsWith(".md")).sort()) {
+  for (const f of readdirSync(dir).filter(isCadenceFile).sort()) {
     const name = basename(f, ".md");
     out[name] = parseCadence(name, readFileSync(join(dir, f), "utf8"));
   }
@@ -194,6 +209,15 @@ export function loadCadences(dir = paths.cadences): Record<string, Cadence> {
 /** Fills a page template. Unknown variables were already refused by parseCadence. */
 export function renderPage(c: Cadence, vars: { period: string; project: string }): string {
   return c.page.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => ({ title: c.title, ...vars })[k as "title" | "period" | "project"]);
+}
+
+/** A project's cadence by name, or a plain-words error naming what exists. */
+export function cadenceOf(team: Team, cadences: Record<string, Cadence>, project: string, name: string): Cadence {
+  const p = team.projects[project];
+  if (!p) throw new HoustonError(`There is no project "${project}". Projects: ${Object.keys(team.projects).join(", ")}.`);
+  const c = cadences[name];
+  if (!c || !p.cadences.includes(name)) throw new HoustonError(`Project ${project} has no cadence "${name}". Its cadences: ${p.cadences.join(", ") || "none"}.`);
+  return c;
 }
 
 /** Folder of one cadence period in the Houston repo, relative to the repo root. */

@@ -1,6 +1,6 @@
 // houston: agents decide what to say; this CLI does every write and every check.
 import type { Command } from "./command";
-import { HoustonError } from "./lib/util";
+import { HoustonError, UsageError } from "./lib/util";
 
 /** Commands in the order `houston help` lists them, grouped by when people use them. */
 const COMMANDS: Record<string, () => Promise<{ default: Command }>> = {
@@ -52,6 +52,7 @@ async function main(argv: string[]) {
 main(process.argv.slice(2)).catch((e) => {
   if (e instanceof HoustonError) {
     console.error(`houston: ${e.message}`);
+    if (e instanceof UsageError) console.error(`Run \`houston help ${process.argv[2]}\` to see how to use it.`);
     process.exit(1);
   }
   throw e;

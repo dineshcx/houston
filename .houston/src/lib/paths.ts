@@ -10,7 +10,9 @@ import { sh } from "./util";
  * checkout through git's common dir.
  */
 function findRoot(): string {
-  const start = process.env.HOUSTON_ROOT ? resolve(process.env.HOUSTON_ROOT) : resolve(import.meta.dir, "../../..");
+  // From .houston/src/lib that's three levels up; from the trusted copy in .houston-local/core, four.
+  const up = resolve(import.meta.dir, "../../..");
+  const start = process.env.HOUSTON_ROOT ? resolve(process.env.HOUSTON_ROOT) : up.endsWith("/.houston-local") ? dirname(up) : up;
   const r = sh(["git", "-C", start, "rev-parse", "--path-format=absolute", "--git-common-dir"]);
   if (r.ok && r.stdout.endsWith("/.git")) return dirname(r.stdout);
   return start;
@@ -33,10 +35,15 @@ export const paths = {
   coreSkills: join(CORE, "skills"),
   presets: join(CORE, "presets"),
   version: join(CORE, "VERSION"),
+  /** The core as committed in the repo, which `houston trust` copies from. */
+  repoCore: join(ROOT, ".houston"),
+  /** The CLI to give schedulers and agents: the trusted copy, so a pulled change can't run unreviewed. */
+  bin: join(LOCAL_DIR, "core", "bin", "houston"),
   /** Personal and gitignored from here down. */
   local: join(ROOT, "houston.local.yml"),
   agentsLocal: join(ROOT, "AGENTS.local.md"),
   localDir: LOCAL_DIR,
+  trustedCore: join(LOCAL_DIR, "core"),
   state: join(LOCAL_DIR, "state.json"),
   digest: join(LOCAL_DIR, "digest.md"),
   draft: join(LOCAL_DIR, "draft.md"),
