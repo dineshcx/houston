@@ -10,9 +10,9 @@ import { loadTeam, projectOf, teamRepos, type Local } from "../lib/config";
 import { isTrusted, trustCore } from "../lib/core";
 import { github } from "../lib/github";
 import { coreVersion, IN_CODE_REPO, paths } from "../lib/paths";
-import { git } from "../lib/repo";
-import { agentsLocalText, excludeFile, findRepos, globalBlock, globalFile, home, localText, originOf, pointerText, readLocalRaw, systemTimezone, withBlock } from "../lib/setup";
-import { HoustonError } from "../lib/util";
+import { git, originOf } from "../lib/repo";
+import { agentsLocalText, blockRoots, excludeFile, findRepos, globalBlock, globalFile, houstonRoot, localText, pointerText, readLocalRaw, realDir, systemTimezone, withRoot } from "../lib/setup";
+import { home, HoustonError, UsageError } from "../lib/util";
 
 type Change = { what: string; apply: () => void };
 
@@ -23,18 +23,19 @@ const excludeLines = (file: string) => read(file).split("\n").map((l) => l.trim(
 /** "owner/name=/path" or "owner/name=none" → [repo, path | null]. */
 function parseOverride(text: string): [string, string | null] {
   const m = /^([\w.-]+\/[\w.-]+)=(.+)$/.exec(text);
-  if (!m) throw new HoustonError(`--repo ${text}: write it as owner/name=/path/to/clone, or owner/name=none if it isn't on this machine.`);
+  if (!m) throw new UsageError(`--repo ${text}: write it as owner/name=/path/to/clone, or owner/name=none if it isn't on this machine.`);
   if (m[2] === "none") return [m[1], null];
   const dir = resolve(m[2].replace(/^~(?=\/|$)/, home()));
   if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new HoustonError(`--repo ${text}: ${dir} is not a folder on this machine.`);
-  return [m[1], dir];
+  return [m[1], realDir(dir)];
 }
 
 function planLink(opts: { overrides: string[]; global: boolean }): { changes: Change[]; local: Partial<Local>; missing: string[]; notes: string[] } {
   const team = loadTeam();
   const raw = readLocalRaw();
   const notes: string[] = [];
-  const repos: Record<string, string | null> = { ...raw.repos };
+  const repos: Record<string, string | null> = {};
+  for (const [repo, dir] of Object.entries(raw.repos ?? {})) repos[repo] = dir === null || dir === "none" ? null : realDir(String(dir).replace(/^~(?=\/|$)/, home()));
 
   const overrides = new Map(opts.overrides.map(parseOverride));
   for (const repo of overrides.keys()) if (!projectOf(team, repo)) throw new HoustonError(`--repo ${repo}: that's not one of the team's repos in houston.yml.`);
@@ -88,8 +89,8 @@ function planLink(opts: { overrides: string[]; global: boolean }): { changes: Ch
 
   if (opts.global) {
     const file = globalFile();
-    const next = withBlock(read(file), globalBlock());
-    if (read(file) !== next) changes.push({ what: `write the Houston block in ${file}`, apply: () => write(file, next) });
+    const next = withRoot(read(file), houstonRoot());
+    if (read(file) !== next) changes.push({ what: `list this Houston repo in the Houston block in ${file}`, apply: () => write(file, next) });
   }
 
   // Runs commit unattended, so no passphrase prompt; and a symlink someone pushes stays a plain
@@ -98,7 +99,8 @@ function planLink(opts: { overrides: string[]; global: boolean }): { changes: Ch
     for (const [key, value] of [["commit.gpgsign", "false"], ["core.symlinks", "false"]])
       if (git(["config", "--local", "--get", key]).stdout !== value) changes.push({ what: `set git ${key} ${value} in the Houston repo`, apply: () => void git(["config", "--local", key, value]) });
 
-  // The person is running setup by hand, so the core they have is the one they chose.
+  // The person is running setup by hand, so the core they have is the one they chose. Trusting also
+  // makes the copy that schedulers and the global block run.
   if (!isTrusted()) changes.push({ what: "trust this Houston core for unattended runs", apply: () => void trustCore() });
 
   return { changes, local, missing, notes };
@@ -125,11 +127,16 @@ function planRemove(force: boolean): { changes: Change[]; notes: string[] } {
     if (kept.length !== lines.length) changes.push({ what: `${repo}: remove Houston's lines from ${exclude}`, apply: () => write(exclude, kept.join("\n")) });
   }
   if (existsSync(paths.agentsLocal)) changes.push({ what: "delete AGENTS.local.md", apply: () => rmSync(paths.agentsLocal) });
+  // Only this Houston repo leaves the block; another team's stays listed.
   const file = globalFile();
-  const next = withBlock(read(file), null);
-  if (read(file) !== next) changes.push({ what: `remove the Houston block from ${file}`, apply: () => write(file, next) });
+  const next = withRoot(read(file), houstonRoot(), true);
+  if (read(file) !== next) changes.push({ what: blockRoots(next).length ? `take this Houston repo out of the Houston block in ${file}` : `remove the Houston block from ${file}`, apply: () => write(file, next) });
   if (existsSync(paths.local)) notes.push("Kept houston.local.yml (your repo paths), so `houston link` can set you up again. Delete it if you're leaving the team.");
-  if (local.schedule) notes.push(`Your scheduler still runs \`houston run\`: ${local.schedule}. Remove it there; Houston doesn't manage schedules.`);
+  notes.push(
+    local.schedule
+      ? `Your scheduler still runs \`houston run\`: ${local.schedule}. Delete that task there; Houston doesn't manage schedules.`
+      : "If you scheduled `houston run` anywhere, delete that task too; Houston doesn't manage schedules.",
+  );
   return { changes, notes };
 }
 
@@ -140,11 +147,13 @@ houston link [--repo owner/name=/path]… [--dry-run] [--remove [--force]] [--no
 
 Finds the team's repos under your usual code folders (and HOUSTON_SCAN_DIRS), writes
 houston.local.yml, a hidden .houston file and .houston-inbox.md in each repo, AGENTS.local.md,
-and the Houston block in ~/.claude/CLAUDE.md. Running it again only fixes what changed.
+lists this Houston repo in the Houston block in ~/.claude/CLAUDE.md, and trusts the core.
+Running it again only fixes what changed.
 
   --repo owner/name=/path   use this clone (or =none: not on this machine)
   --dry-run                 print the plan and write nothing
-  --remove                  undo it all (an inbox with notes is kept unless --force)
+  --remove                  undo it all for this Houston repo (an inbox with notes is kept
+                            unless --force; other teams in the block stay)
   --no-global               leave ~/.claude/CLAUDE.md alone`,
   async run(args) {
     const { values } = parseArgs({
@@ -179,7 +188,7 @@ and the Houston block in ~/.claude/CLAUDE.md. Running it again only fixes what c
     else if (dry) {
       console.log("\nPlan (nothing written yet; run again without --dry-run to apply):");
       for (const c of changes) console.log(`  - ${c.what}`);
-      if (!values.remove && changes.some((c) => c.what.includes(globalFile()))) console.log(`\nThe block for ${globalFile()}:\n\n${globalBlock()}`);
+      if (!values.remove && changes.some((c) => c.what.includes(globalFile()))) console.log(`\nThe block for ${globalFile()}:\n\n${globalBlock(blockRoots(withRoot(read(globalFile()), houstonRoot())))}`);
     } else {
       console.log(values.remove ? "\nRemoved:" : "\nDone:");
       for (const c of changes) {

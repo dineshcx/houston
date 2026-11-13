@@ -100,7 +100,7 @@ describe("houston propose", () => {
     write(p, proposal);
     const r = houston("propose", "--title", "Daily sync 13 Nov", "--notes", notes, "--proposal", p);
     expect(r.err).toBe("");
-    expect(r.out).toEndWith("https://github.com/acme/houston/pull/1");
+    expect(r.out).toContain("Opened https://github.com/acme/houston/pull/1");
 
     expect(git(["rev-parse", "--abbrev-ref", "HEAD"])).toBe("main");
     expect(readFileSync(join(work, "README.md"), "utf8")).toBe("my unsaved edit\n");
@@ -117,6 +117,36 @@ describe("houston propose", () => {
     expect(pushed).toContain('owner: "ana"');
     expect(pushed).toContain(`source: "${notes}"`);
     expect(git(["show", `intake/${name}:${notes}`], bare)).toContain("JSON only");
+  });
+});
+
+describe("houston propose, notes on a page that's already in the repo", () => {
+  const page = "projects/storefront/daily/2026-11-14/_page.md";
+  test("pulls first, so the PR keeps teammates' additions, then puts the page back as it is in the repo", () => {
+    write(join(work, page), "# Daily\n\n## Agenda\n\n## Notes\n\nnothing yet\n\n## Decisions\n");
+    git(["add", page]);
+    git(["commit", "--quiet", "-m", "page"]);
+    git(["push", "--quiet"]);
+    // A teammate adds to the agenda after this checkout last pulled.
+    git(["pull", "--quiet"], other);
+    write(join(other, page), "# Daily\n\n## Agenda\n- raj: the heartbeat\n\n## Notes\n\nnothing yet\n\n## Decisions\n");
+    git(["commit", "--quiet", "-am", "raj's agenda"], other);
+    git(["push", "--quiet"], other);
+
+    write(join(work, page), "# Daily\n\n## Agenda\n\n## Notes\n\nnothing yet\n\n## Decisions\n- JSON only\n");
+    const p = join(work, ".houston-local/page.yml");
+    write(p, "project: storefront\nchanges: []\n");
+    const r = houston("propose", "--title", "Daily sync 14 Nov", "--notes", page, "--proposal", p);
+    expect(r.err).toBe("");
+    expect(r.out).toContain(`Moved your changes to ${page} into the pull request`);
+
+    const pushed = git(["show", `intake/${today}-daily-sync-14-nov:${page}`], bare);
+    expect(pushed).toContain("- raj: the heartbeat");
+    expect(pushed).toContain("- JSON only");
+    // The checkout is clean, so pulling after the merge can't collide.
+    expect(git(["status", "--porcelain", "--", page])).toBe("");
+    expect(readFileSync(join(work, page), "utf8")).toContain("- raj: the heartbeat");
+    expect(readFileSync(join(work, page), "utf8")).not.toContain("JSON only");
   });
 });
 
@@ -190,4 +220,18 @@ describe("houston apply", () => {
     expect(r.code).toBe(1);
     expect(r.err).toContain("change 1: the team's rules say Houston doesn't create issues (rules.create_issue: never)");
   });
+});
+
+test("a team's templates/issue.md shapes new issues' summaries, and the next step is never empty", () => {
+  git(["pull", "--quiet"], other);
+  write(join(other, "templates/issue.md"), "<!-- ours -->\n<!-- houston:summary -->\n**Why:** {{goal}}\n**From:** {{raised_by}}\n**Next step:** {{next_step}}\n### Risks\n<!-- /houston:summary -->\n");
+  write(join(other, "proposals/tpl.yml"), "title: Tpl\nowner: ana\nproject: storefront\nsource: x.md\nchanges:\n  - create: { repo: acme/web, title: Templated }\n");
+  git(["add", "."], other);
+  git(["commit", "--quiet", "-m", "template"], other);
+  git(["push", "--quiet"], other);
+  expect(houston("apply", "proposals/tpl.yml").code).toBe(0);
+  const body = data().issues.find((i) => i.title === "Templated")!.body;
+  expect(body).toStartWith("<!-- houston:summary -->\n**Why:** Templated\n**From:** @ana in [Tpl]");
+  expect(body).toContain("**Next step:** not decided yet\n### Risks\n<!-- /houston:summary -->");
+  expect(body).not.toContain("<!-- ours -->");
 });

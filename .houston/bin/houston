@@ -1,3 +1,5 @@
 #!/bin/sh
 # The houston CLI. Needs Bun (https://bun.sh); everything else is in .houston/src.
-exec bun "$(dirname "$0")/../src/cli.ts" "$@"
+# --config names Houston's own (empty) bunfig.toml, so a bunfig.toml in the folder it runs from can't preload code.
+DIR=$(dirname "$0")
+exec bun --config="$DIR/../bunfig.toml" "$DIR/../src/cli.ts" "$@"

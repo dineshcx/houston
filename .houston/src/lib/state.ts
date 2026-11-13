@@ -1,6 +1,6 @@
-// A person's run state on this machine: .houston-local/state.json (gitignored).
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+// A person's run state on this machine: .houston-local/state.json (gitignored), and the run lock.
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { paths } from "./paths";
 
 /** "ok", or why a source failed. A failed source shows on the page as incomplete, never as a quiet day. */
@@ -17,13 +17,17 @@ export type State = {
     /** When the draft publishes on its own (rules.publish_runs = review_until_deadline). */
     deadline?: string;
     held?: boolean;
-    /** Hash of draft.md as the run's agent left it; a different hash means the person edited it. */
+    /** The person changed the draft (with `houston draft add` or by editing the file); no run replaces it. */
+    edited?: boolean;
+    /** Hash of draft.md as Houston last wrote it; a different hash means the person edited the file. */
     agent_hash: string;
     sources: SourceHealth;
     /** The inbox lines this draft was made from; publishing removes exactly these. */
     inbox: { file: string; lines: string[] }[];
+    /** Issues already commented on by an earlier, interrupted publish, so a retry doesn't comment twice. */
+    commented?: string[];
   };
-  /** Hash of .houston/ the person last approved; a changed core won't run unattended. */
+  /** Hash of .houston/ (and the team's run skill) the person last approved; a changed core won't run unattended. */
   trusted_core?: string;
 };
 
@@ -44,3 +48,38 @@ export function updateState(change: (s: State) => void): State {
 }
 
 export const hash = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex").slice(0, 16);
+
+/** Where a run's evidence starts: the end of the last published window, else 24 hours ago. */
+export function windowStart(state: State, now: Date): Date {
+  return state.last_publish ? new Date(state.last_publish) : new Date(now.getTime() - 86_400_000);
+}
+
+const LOCK = join(paths.localDir, "run.lock");
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
+ * Takes the one-run-at-a-time lock (a file holding our pid). Returns the release function, or
+ * undefined when another live process holds it. A lock left by a process that died is taken over.
+ */
+export function tryLock(): (() => void) | undefined {
+  mkdirSync(paths.localDir, { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(LOCK, String(process.pid), { flag: "wx" });
+      return () => rmSync(LOCK, { force: true });
+    } catch {
+      const pid = Number(existsSync(LOCK) ? readFileSync(LOCK, "utf8") : 0);
+      if (pid && alive(pid)) return undefined;
+      rmSync(LOCK, { force: true });
+    }
+  }
+  return undefined;
+}

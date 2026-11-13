@@ -2,33 +2,51 @@
 import type { Command } from "./command";
 import { HoustonError, UsageError } from "./lib/util";
 
-/** Commands in the order `houston help` lists them, grouped by when people use them. */
-const COMMANDS: Record<string, () => Promise<{ default: Command }>> = {
-  // setting up
-  link: () => import("./commands/link"),
-  doctor: () => import("./commands/doctor"),
-  schedule: () => import("./commands/schedule"),
-  validate: () => import("./commands/validate"),
-  explain: () => import("./commands/explain"),
-  // the run
-  run: () => import("./commands/run"),
-  collect: () => import("./commands/collect"),
-  draft: () => import("./commands/draft"),
-  publish: () => import("./commands/publish"),
-  // issues and pages
-  issues: () => import("./commands/issues"),
-  summary: () => import("./commands/summary"),
-  labels: () => import("./commands/labels"),
-  page: () => import("./commands/page"),
-  // intake
-  propose: () => import("./commands/propose"),
-  apply: () => import("./commands/apply"),
-  // the app and core
-  app: () => import("./commands/app"),
-  skill: () => import("./commands/skill"),
-  trust: () => import("./commands/trust"),
-  update: () => import("./commands/update"),
-};
+type Load = () => Promise<{ default: Command }>;
+
+/** Commands as `houston help` lists them, grouped by when people use them. */
+const GROUPS: [string, Record<string, Load>][] = [
+  [
+    "Every day",
+    {
+      run: () => import("./commands/run"),
+      draft: () => import("./commands/draft"),
+      publish: () => import("./commands/publish"),
+      app: () => import("./commands/app"),
+    },
+  ],
+  [
+    "Setting up",
+    {
+      link: () => import("./commands/link"),
+      doctor: () => import("./commands/doctor"),
+      schedule: () => import("./commands/schedule"),
+      trust: () => import("./commands/trust"),
+      update: () => import("./commands/update"),
+    },
+  ],
+  [
+    "Your team's setup",
+    {
+      validate: () => import("./commands/validate"),
+      explain: () => import("./commands/explain"),
+      skill: () => import("./commands/skill"),
+    },
+  ],
+  [
+    "Used by agents and skills",
+    {
+      collect: () => import("./commands/collect"),
+      issues: () => import("./commands/issues"),
+      summary: () => import("./commands/summary"),
+      labels: () => import("./commands/labels"),
+      page: () => import("./commands/page"),
+      propose: () => import("./commands/propose"),
+      apply: () => import("./commands/apply"),
+    },
+  ],
+];
+const COMMANDS: Record<string, Load> = Object.assign({}, ...GROUPS.map(([, cmds]) => cmds));
 
 async function help(name?: string) {
   if (name && COMMANDS[name]) {
@@ -36,8 +54,11 @@ async function help(name?: string) {
     console.log(`houston ${name}: ${c.summary}\n\n${c.usage.trim()}`);
     return;
   }
-  console.log("houston: your team's context, kept where the work happens.\n\nCommands:");
-  for (const [n, load] of Object.entries(COMMANDS)) console.log(`  ${n.padEnd(10)} ${(await load()).default.summary}`);
+  console.log("houston: your team's context, kept where the work happens.");
+  for (const [group, cmds] of GROUPS) {
+    console.log(`\n${group}:`);
+    for (const [n, load] of Object.entries(cmds)) console.log(`  ${n.padEnd(10)} ${(await load()).default.summary}`);
+  }
   console.log("\nRun `houston help <command>` for its options.");
 }
 
@@ -50,6 +71,8 @@ async function main(argv: string[]) {
 }
 
 main(process.argv.slice(2)).catch((e) => {
+  // parseArgs refuses unknown or malformed flags; that's wrong usage too, not a crash.
+  if (String(e?.code).startsWith("ERR_PARSE_ARGS")) e = new UsageError(e.message);
   if (e instanceof HoustonError) {
     console.error(`houston: ${e.message}`);
     if (e instanceof UsageError) console.error(`Run \`houston help ${process.argv[2]}\` to see how to use it.`);

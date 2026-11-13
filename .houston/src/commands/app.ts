@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import { createServer } from "../../app/server";
 import type { Command } from "../command";
-import { HoustonError, sh } from "../lib/util";
+import { HoustonError, sh, UsageError } from "../lib/util";
 
 export default {
   summary: "Start the local app on 127.0.0.1",
@@ -14,7 +14,7 @@ houston app [--port 4317] [--no-open]
   run(args) {
     const { values } = parseArgs({ args, options: { port: { type: "string", default: "4317" }, "no-open": { type: "boolean" } }, strict: true, allowPositionals: true });
     const port = Number(values.port);
-    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new HoustonError(`"${values.port}" is not a port. Use a number like 4317.`);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new UsageError(`"${values.port}" is not a port. Use a number like 4317.`);
     let server;
     try {
       server = createServer({ port });

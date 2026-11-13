@@ -1,15 +1,17 @@
-// houston validate: checks houston.yml and every cadence file, listing every problem in plain words.
+// houston validate: checks houston.yml, every cadence file and the issue template, listing every
+// problem in plain words.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Command } from "../command";
-import { parseCadence } from "../lib/cadence";
+import { isCadenceFile, parseCadence } from "../lib/cadence";
+import { issueTemplate } from "../lib/proposals";
 import { loadTeam } from "../lib/config";
 import { paths } from "../lib/paths";
 
-/** Every problem in houston.yml and cadences/, or none. */
+/** Every problem in houston.yml, cadences/ and the issue template, or none. */
 export function problems(): string[] {
   const out: string[] = [];
-  const files = existsSync(paths.cadences) ? readdirSync(paths.cadences).filter((f) => f.endsWith(".md")) : [];
+  const files = existsSync(paths.cadences) ? readdirSync(paths.cadences).filter(isCadenceFile) : [];
   for (const f of files) {
     try {
       parseCadence(basename(f, ".md"), readFileSync(join(paths.cadences, f), "utf8"));
@@ -23,11 +25,16 @@ export function problems(): string[] {
   } catch (e) {
     out.push((e as Error).message);
   }
+  try {
+    issueTemplate();
+  } catch (e) {
+    out.push((e as Error).message);
+  }
   return out;
 }
 
 export default {
-  summary: "Check houston.yml and cadences/ and explain any problem",
+  summary: "Check houston.yml, cadences/ and templates/issue.md and explain any problem",
   usage: "houston validate\n\nExits 1 if anything is wrong.",
   run() {
     const found = problems();

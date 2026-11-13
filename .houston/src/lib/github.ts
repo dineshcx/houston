@@ -1,7 +1,7 @@
 // The only way Houston talks to GitHub. Everything goes through the person's own `gh` login.
 // Tests (and dry runs) set HOUSTON_FAKE_GITHUB=<file.json> to use a file-backed GitHub instead.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { HoustonError, must, sh } from "./util";
+import { HoustonError, iso, must, sh } from "./util";
 
 export type IssueRef = { repo: string; number: number };
 
@@ -29,7 +29,7 @@ export type PullRequest = IssueRef & {
   updatedAt: string;
 };
 
-/** One thing a person did on GitHub, from their events feed. */
+/** One thing a person did on GitHub: a comment, review, issue opened or closed, PR or commit. */
 export type Activity = { at: string; repo: string; kind: string; number?: number; branch?: string; text: string };
 
 export interface GitHub {
@@ -80,7 +80,17 @@ class GhGitHub implements GitHub {
     return this.me;
   }
 
+  /**
+   * What the person did in these repos since `since`. GitHub's events feed no longer carries PR
+   * titles, bodies or pushed commits, so those come from search; comments, reviews and issues
+   * opened or closed still come from events.
+   */
   activity(user: string, repos: string[], since: Date): Activity[] {
+    const out = [...this.events(user, repos, since), ...this.searchPRs(user, repos, since), ...this.searchCommits(user, repos, since)];
+    return out.sort((a, b) => a.at.localeCompare(b.at));
+  }
+
+  private events(user: string, repos: string[], since: Date): Activity[] {
     const wanted = new Set(repos.map(lower));
     const out: Activity[] = [];
     for (let page = 1; page <= 3; page++) {
@@ -92,7 +102,33 @@ class GhGitHub implements GitHub {
       }
       if (batch.length < 100 || new Date(batch.at(-1).created_at) < since) break;
     }
-    return out.reverse();
+    return out;
+  }
+
+  /** Runs a search over the team's repos, a few repos per query so each stays under GitHub's length limit. */
+  private search(endpoint: string, terms: string, repos: string[]): any[] {
+    return searchQueries(terms, repos).flatMap((q) => json<{ items: any[] }>(gh(["api", "-X", "GET", endpoint, "-f", `q=${q}`, "-f", "per_page=100"])).items);
+  }
+
+  private searchPRs(user: string, repos: string[], since: Date): Activity[] {
+    return this.search("search/issues", `is:pr author:${user} updated:>=${iso(since)}`, repos).map((p) => {
+      const repo = String(p.repository_url).split("/repos/")[1];
+      const merged = p.pull_request?.merged_at;
+      const text = `${p.title ?? ""}\n${p.body ?? ""}`;
+      // The branch name only helps match an issue when the PR's own text doesn't name one.
+      const branch = /#\d+/.test(text) ? undefined : sh(["gh", "pr", "view", String(p.number), "-R", repo, "--json", "headRefName", "-q", ".headRefName"]).stdout || undefined;
+      const kind = merged ? "merged PR" : p.state === "closed" ? "closed PR" : "open PR";
+      return { at: merged ?? p.closed_at ?? p.updated_at, repo, kind, number: p.number, branch, text };
+    });
+  }
+
+  private searchCommits(user: string, repos: string[], since: Date): Activity[] {
+    return this.search("search/commits", `author:${user} committer-date:>=${iso(since)}`, repos).map((c) => ({
+      at: iso(new Date(c.commit.committer.date)),
+      repo: c.repository.full_name,
+      kind: `commit ${String(c.sha).slice(0, 7)}`,
+      text: String(c.commit.message).split("\n")[0],
+    }));
   }
 
   issues(repo: string, opts: { assignee?: string; label?: string; state?: "open" | "all" } = {}): Issue[] {
@@ -196,8 +232,26 @@ class GhGitHub implements GitHub {
   }
 }
 
-/** Turns one GitHub event into one line of activity, or nothing if it isn't work worth reporting. */
-function toActivity(e: any): Activity | undefined {
+/** Search queries: `terms` plus repo: qualifiers, split so none passes GitHub's 256-character limit. */
+export function searchQueries(terms: string, repos: string[], limit = 250): string[] {
+  const out: string[] = [];
+  let q = terms;
+  for (const r of repos) {
+    if (q !== terms && q.length + r.length + 6 > limit) {
+      out.push(q);
+      q = terms;
+    }
+    q += ` repo:${r}`;
+  }
+  return repos.length ? [...out, q] : [];
+}
+
+/**
+ * Turns one GitHub event into one line of activity, or nothing if it isn't work worth reporting.
+ * PRs and commits come from search instead. Issue label, assignee and edit events are left out:
+ * they are mostly Houston's own writes from the last publish, not new work.
+ */
+export function toActivity(e: any): Activity | undefined {
   const p = e.payload ?? {};
   const base = { at: e.created_at, repo: e.repo.name };
   const num = (p.issue ?? p.pull_request)?.number;
@@ -207,13 +261,8 @@ function toActivity(e: any): Activity | undefined {
     case "PullRequestReviewEvent":
       return { ...base, kind: "reviewed", number: num, text: (p.review?.state ?? "").toLowerCase() };
     case "IssuesEvent":
+      if (!["opened", "closed", "reopened"].includes(p.action)) return undefined;
       return { ...base, kind: `${p.action} issue`, number: num, text: p.issue?.title ?? "" };
-    case "PullRequestEvent": {
-      const action = p.action === "closed" && p.pull_request?.merged ? "merged" : p.action;
-      return { ...base, kind: `${action} PR`, number: num, branch: p.pull_request?.head?.ref, text: `${p.pull_request?.title ?? ""}\n${p.pull_request?.body ?? ""}` };
-    }
-    case "PushEvent":
-      return { ...base, kind: "pushed", branch: String(p.ref ?? "").replace("refs/heads/", ""), text: (p.commits ?? []).map((c: any) => c.message.split("\n")[0]).join("\n") };
   }
 }
 
@@ -282,6 +331,9 @@ export class FakeGitHub implements GitHub {
   editLabels(ref: IssueRef, add: string[], remove: string[]) {
     const d = this.read();
     const i = this.find(d, ref);
+    // Like GitHub, refuse a label the repo doesn't have (when the fake says which labels it has).
+    const missing = add.filter((l) => d.labels[ref.repo] && !d.labels[ref.repo].includes(l));
+    if (missing.length) throw new HoustonError(`'${missing[0]}' not found in ${ref.repo}`);
     i.labels = [...new Set([...i.labels.filter((l) => !remove.includes(l)), ...add])];
     this.write(d, `labels ${refText(ref)} +${add.join(",")} -${remove.join(",")}`);
   }
@@ -294,7 +346,7 @@ export class FakeGitHub implements GitHub {
     const d = this.read();
     const number = Math.max(0, ...d.issues.filter((i) => lower(i.repo) === lower(repo)).map((i) => i.number), ...d.pulls.filter((p) => lower(p.repo) === lower(repo)).map((p) => p.number)) + 1;
     d.issues.push({ repo, number, title: issue.title, body: issue.body, labels: issue.labels ?? [], assignees: issue.assignees ?? [], state: "open", url: `https://github.com/${repo}/issues/${number}`, updatedAt: new Date().toISOString() });
-    this.write(d, `create ${repo}#${number} ${issue.title}`);
+    this.write(d, `create ${refText({ repo, number })} ${issue.title}`);
     return { repo, number };
   }
   comment(ref: IssueRef, body: string) {
@@ -315,15 +367,15 @@ export class FakeGitHub implements GitHub {
     const number = Math.max(0, ...d.pulls.filter((p) => lower(p.repo) === lower(repo)).map((p) => p.number), ...d.issues.filter((i) => lower(i.repo) === lower(repo)).map((i) => i.number)) + 1;
     const url = `https://github.com/${repo}/pull/${number}`;
     d.pulls.push({ repo, number, title: pr.title, body: pr.body, state: "open", url, branch: pr.head, author: d.login, labels: pr.labels ?? [], updatedAt: new Date().toISOString() });
-    this.write(d, `pr ${repo}#${number} ${pr.title}`);
+    this.write(d, `pr ${refText({ repo, number })} ${pr.title}`);
     return url;
   }
   mergePullRequest(repo: string, number: number) {
     const d = this.read();
     const p = d.pulls.find((x) => lower(x.repo) === lower(repo) && x.number === number);
-    if (!p) throw new HoustonError(`${repo}#${number} is not a pull request.`);
+    if (!p) throw new HoustonError(`${refText({ repo, number })} is not a pull request.`);
     p.state = "merged";
-    this.write(d, `merge ${repo}#${number}`);
+    this.write(d, `merge ${refText({ repo, number })}`);
   }
   visibility(repo: string) {
     return this.read().visibility[repo] ?? "private";

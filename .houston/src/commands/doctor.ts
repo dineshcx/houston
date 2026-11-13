@@ -4,11 +4,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "../command";
+import { formatAt } from "../lib/cadence";
 import { loadLocal, loadTeam, teamRepos, type Local, type Team } from "../lib/config";
 import { isTrusted } from "../lib/core";
 import { github } from "../lib/github";
 import { coreVersion, IN_CODE_REPO, paths } from "../lib/paths";
-import { BLOCK_BEGIN, excludeFile, globalFile, originOf } from "../lib/setup";
+import { originOf } from "../lib/repo";
+import { BLOCK_BEGIN, blockRoots, excludeFile, globalFile, houstonRoot, systemTimezone } from "../lib/setup";
 import { readState } from "../lib/state";
 import { parseDuration, sh } from "../lib/util";
 import { problems } from "./validate";
@@ -38,6 +40,17 @@ function login(): string | undefined {
   }
 }
 
+function localFile(): Local | undefined {
+  if (!existsSync(paths.local)) return void check("fail", "no houston.local.yml yet", "Run `houston link`.");
+  try {
+    const local = loadLocal();
+    check("ok", "houston.local.yml is valid");
+    return local;
+  } catch (e) {
+    check("fail", (e as Error).message.replace(/\n/g, "\n    "), "Fix it, or run `houston link` to write it again.");
+  }
+}
+
 function linkedRepos(team: Team, local: Local) {
   for (const { repo } of teamRepos(team)) {
     const dir = local.repos[repo];
@@ -55,21 +68,37 @@ function linkedRepos(team: Team, local: Local) {
   }
 }
 
-function runs(team: Team) {
+/** A missing block is only a warning: someone who linked with --no-global keeps their own instructions. */
+function globalBlock() {
+  const text = existsSync(globalFile()) ? readFileSync(globalFile(), "utf8") : "";
+  if (blockRoots(text).includes(houstonRoot())) return check("ok", `the Houston block in ${globalFile()} lists this repo`);
+  const what = text.includes(BLOCK_BEGIN) ? `the Houston block in ${globalFile()} doesn't list this repo` : `no Houston block in ${globalFile()}`;
+  check("warn", `${what}, so your agent won't catch up missed runs here`, "Run `houston link` (skip this if you chose --no-global).");
+}
+
+/** Same wording as `houston trust`: trusting for the first time is routine; a changed core needs a review first. */
+async function trust() {
+  const version = await coreVersion();
+  if (isTrusted()) check("ok", `core ${version} is trusted for unattended runs`);
+  else if (!readState().trusted_core) check("fail", `core ${version} isn't trusted on this machine yet`, "Run `houston link` (or `houston trust`).");
+  else check("fail", `core ${version} has changed since you last trusted it, so runs won't start`, `Review the change with \`git -C ${paths.root} log -p -- .houston\`, then run \`houston trust\`.`);
+}
+
+function runs(team: Team, tz: string) {
   const s = readState();
   const now = Date.now();
   if (!s.last_run) check("warn", "no run yet", "Run `houston run` once to see it work.");
   else {
     const age = now - Date.parse(s.last_run.at);
-    const note = `last run ${ago(age)} ago (${s.last_run.outcome}${s.last_run.note ? `: ${s.last_run.note}` : ""})`;
+    const note = `last run ${formatAt(s.last_run.at, tz)}, ${ago(age)} ago (${s.last_run.outcome}${s.last_run.note ? `: ${s.last_run.note}` : ""})`;
     if (s.last_run.outcome === "failed") check("fail", note, "Run `houston run` to see the error.");
     else if (age > 2 * parseDuration(team.runs.every)) check("warn", `${note}; runs.every is ${team.runs.every}`, "Check that your scheduler is running `houston run` (see `houston schedule`).");
     else check("ok", note);
   }
   if (!s.draft) check("ok", "no draft waiting");
   else {
-    const when = s.draft.deadline ? `publishes ${new Date(s.draft.deadline).toLocaleString()}` : "waits for you";
-    check("warn", `a draft is waiting${s.draft.held ? " (held)" : ""}; it ${s.draft.held ? "waits for you" : when}`, "Read it with `houston draft`, then `houston publish`, `houston draft hold` or edit it.");
+    const when = s.draft.held || !s.draft.deadline ? "waits for you" : `publishes ${formatAt(s.draft.deadline, tz)}`;
+    check("warn", `a draft is waiting${s.draft.held ? " (held)" : ""}; it ${when}`, "Read it with `houston draft`, then `houston publish`, `houston draft hold` or edit it.");
   }
 }
 
@@ -77,20 +106,18 @@ export default {
   summary: "Check this machine's setup and say how to fix each problem",
   usage: "houston doctor\n\nExits 1 if any check fails.",
   async run() {
+    const fresh = !existsSync(paths.team);
+    if (fresh) check("fail", `this Houston repo isn't set up yet: say "set me up" to your agent here (${paths.root})`);
     tools();
     const me = login();
 
-    const found = problems();
-    check(found.length ? "fail" : "ok", "houston.yml and cadences/ are valid", "Run `houston validate` to see the problems.");
-    const team = found.length ? undefined : loadTeam();
-
-    let local: Local | undefined;
-    try {
-      local = loadLocal();
-      check("ok", "houston.local.yml is valid");
-    } catch (e) {
-      check("fail", "houston.local.yml", `${(e as Error).message.split("\n")[0]} Run \`houston link\`.`);
+    let team: Team | undefined;
+    if (!fresh) {
+      const found = problems();
+      check(found.length ? "fail" : "ok", "houston.yml and cadences/ are valid", "Run `houston validate` to see the problems.");
+      if (!found.length) team = loadTeam();
     }
+    const local = localFile();
 
     if (team) {
       const who = me ?? local?.user;
@@ -100,10 +127,10 @@ export default {
       check(version === team.core ? "ok" : "fail", `core ${version} matches core: ${team.core} in houston.yml`, "Run `houston update`, or `git pull` if a teammate already updated the core.");
     }
 
-    check(existsSync(globalFile()) && readFileSync(globalFile(), "utf8").includes(BLOCK_BEGIN) ? "ok" : "fail", `Houston block in ${globalFile()}`, "Run `houston link`.");
-    check(isTrusted() ? "ok" : "fail", "core is trusted for unattended runs", "Review what changed in .houston/ (`git log -p -- .houston`), then run `houston trust`.");
-    if (team) runs(team);
-    check(local?.schedule ? "ok" : "fail", local?.schedule ? `schedule: ${local.schedule}` : "schedule recorded", "Run `houston schedule`, set it up in your scheduler, then record it with `houston schedule --set \"…\"`.");
+    globalBlock();
+    await trust();
+    if (team) runs(team, local?.timezone ?? systemTimezone());
+    check(local?.schedule ? "ok" : "fail", local?.schedule ? `schedule: ${local.schedule}` : "no schedule recorded", "Run `houston schedule`, set it up in your scheduler, then record it with `houston schedule --set \"…\"`.");
 
     for (const l of lines) console.log(`${{ ok: "✓", fail: "✗", warn: "!" }[l.mark]} ${l.text}${l.mark !== "ok" && l.fix ? ` — ${l.fix}` : ""}`);
     if (lines.some((l) => l.mark === "fail")) process.exit(1);

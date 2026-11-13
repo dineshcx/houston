@@ -7,7 +7,7 @@ import { HoustonError } from "./util";
 
 export const SUMMARY_START = "<!-- houston:summary -->";
 export const SUMMARY_END = "<!-- /houston:summary -->";
-export const KINDS = ["bug", "feature", "task", "investigation"] as const;
+export const ISSUE_KINDS = ["bug", "feature", "task", "investigation"] as const;
 
 /** A person's edit to an issue body within this window makes summary writes back off. */
 export const RECENT_EDIT_MS = 10 * 60_000;
@@ -19,7 +19,7 @@ export function assertTeamRepo(team: Team, repo: string) {
 
 /** Labels Houston may set: core statuses, priorities and kinds. Everything else belongs to people. */
 export function allowedLabels(): string[] {
-  return [...STATUSES.map((s) => `status:${s}`), ...PRIORITIES, ...KINDS.map((k) => `kind:${k}`)];
+  return [...STATUSES.map((s) => `status:${s}`), ...PRIORITIES, ...ISSUE_KINDS.map((k) => `kind:${k}`)];
 }
 
 /**
@@ -42,11 +42,31 @@ export function planLabels(team: Team, current: string[], add: string[], remove:
   return { add: add.filter((l) => !current.includes(l)), remove: [...removeAll].filter((l) => current.includes(l)) };
 }
 
+const STATUS_COLORS: Record<string, string> = { backlog: "d4d4d4", todo: "c5def5", "in-progress": "fbca04", "in-review": "0075ca", blocked: "d73a4a", "ready-for-agent": "5319e7" };
+const PRIORITY_COLORS: Record<string, string> = { p0: "b60205", p1: "d93f0b", p2: "fbca04", p3: "0e8a16" };
+const KIND_COLORS: Record<string, string> = { bug: "d73a4a", feature: "a2eeef", task: "bfd4f2", investigation: "d4c5f9" };
+
+/** The core labels with their colours and descriptions, as `labels sync` creates them in every repo. */
+export function coreLabels(team: Team): { name: string; color: string; description: string }[] {
+  const columns = new Map(team.status.columns.map((c) => [c.label as string, c.name]));
+  return [
+    ...STATUSES.map((s) => ({ name: `status:${s}`, color: STATUS_COLORS[s], description: `Status: ${columns.get(s) ?? s} (Houston)` })),
+    ...PRIORITIES.map((p) => ({ name: p, color: PRIORITY_COLORS[p], description: `Priority: ${team.priority[p]} (Houston)` })),
+    ...ISSUE_KINDS.map((k) => ({ name: `kind:${k}`, color: KIND_COLORS[k], description: `Kind: ${k} (Houston)` })),
+  ];
+}
+
 export function writeLabels(team: Team, ref: IssueRef, add: string[], remove: string[] = []) {
   assertTeamRepo(team, ref.repo);
   const gh = github();
   const plan = planLabels(team, gh.issue(ref).labels, add, remove);
-  gh.editLabels(ref, plan.add, plan.remove);
+  try {
+    gh.editLabels(ref, plan.add, plan.remove);
+  } catch {
+    // Usually a repo where `houston labels sync` never ran: create the labels being added, then try once more.
+    for (const l of coreLabels(team).filter((l) => plan.add.includes(l.name))) gh.ensureLabel(ref.repo, l.name, l.color, l.description);
+    gh.editLabels(ref, plan.add, plan.remove);
+  }
   return plan;
 }
 
@@ -85,7 +105,7 @@ export function writeSummary(team: Team, ref: IssueRef, summary: string, now = n
   const issue = gh.issue(ref);
   const me = gh.login();
   if (issue.lastEditedAt && issue.editor && issue.editor !== me && now.getTime() - Date.parse(issue.lastEditedAt) < RECENT_EDIT_MS)
-    return { written: false, note: `@${issue.editor} edited ${refText(ref)} in the last 10 minutes; trying again next run` };
+    return { written: false, note: `summary skipped: @${issue.editor} edited ${refText(ref)} in the last 10 minutes, so Houston left their edit alone` };
   const body = replaceSummary(issue.body, summary);
   if (body === issue.body) return { written: false, note: "summary unchanged" };
   gh.setBody(ref, body);

@@ -27,7 +27,7 @@ You are in a team's Houston repo. The `houston` CLI is `.houston/bin/houston` (b
 
 ### 1. Check
 
-Run `houston doctor`. Read every ✗ and ! line. Fix what the person must fix (`gh auth login`, installing Bun or Claude Code) by telling them the exact command; ignore lines that later steps fix (not linked, no block, no schedule, no houston.yml yet).
+Run `houston doctor`. Read every ✗ and ! line. Fix what the person must fix (`gh auth login`, installing Bun or Claude Code) by telling them the exact command; ignore lines that later steps fix (not set up yet, no houston.local.yml, not linked, no Houston block, core not trusted yet, no schedule).
 
 Done when git, gh (signed in), bun and claude pass, or the person has the fix for each.
 
@@ -35,7 +35,7 @@ Done when git, gh (signed in), bun and claude pass, or the person has the fix fo
 
 Look for anything an earlier Houston or Mission Control setup left behind, so nothing runs twice or writes to an old file:
 
-- Blocks in `~/.claude/CLAUDE.md` with older markers: `<!-- standup:inbox -->`, `team-notes:inbox`, or a second Houston block.
+- Blocks in `~/.claude/CLAUDE.md` with older markers: `<!-- standup:inbox -->`, `team-notes:inbox`. (A Houston block between `<!-- houston:begin -->` and `<!-- houston:end -->` stays: `houston link` adds this repo to its list, and it may already list another team's Houston repo.)
 - Old inbox files in the team's code repos (`.standup-inbox.md`, `.team-notes-inbox.md`) and their lines in `.git/info/exclude`.
 - Schedules that run an older routine: `crontab -l`, `~/Library/LaunchAgents/*standup*` / `*mission-control*` / `*houston*`, and your agent app's scheduled tasks. A `schedule:` line in an existing `houston.local.yml` names the current one: keep it.
 
@@ -51,7 +51,16 @@ Look up first: `gh repo list <org> --limit 100 --json nameWithOwner,pushedAt,des
 
 1. **Round 1: projects and repos.** Propose projects (an id like `storefront`, a name) grouping the repos with recent pushes, each repo with a one-line `about` from its description. Ask who the leads and members are (GitHub usernames); recommend the person as the only lead.
 2. **Round 2: how the team works.** Offer the presets: daily standup, weekly sync, sprints with a KPI check (they combine). Turn plain words into cadences: "standup at 10, two-week sprints from Monday" → `daily.md` at `Mon-Fri 10:00`, `sprint.md` with `sprint_start` on a recent Monday and `sprint_length: 2w`. Ask which projects each cadence belongs to; recommend all.
-3. **Round 3: sources and rules.** GitHub is always on. Ask about meeting transcripts, Slack channels and email (recommend GitHub only to start). Show the default rules from `houston explain` in sentences and ask only "anything here you'd change?". Check each repo's visibility (`gh repo view <repo> --json visibility`); if any is public, recommend `summary_on_issue: false` and say why: summaries would publish private work.
+3. **Round 3: rules.** Show the default rules in sentences and ask only "anything here you'd change?":
+   - Agents move issues between status columns and set priority and kind labels (`status`, `labels`: `auto` or `never`).
+   - New issues are only proposed; a person approves them in an intake pull request (`create_issue`: `review` or `never`).
+   - Work spanning repos gets a main issue with sub-issues (`sub_issues`: `auto` or `never`).
+   - Agents comment only to flag a blocker or a question (`issue_comment`: `none`, `blockers_only` or `summary_changes`).
+   - Agents keep a living summary at the top of each issue (`summary_on_issue`: `true` or `false`).
+   - Drafts publish 15 minutes before the cadence unless the person reviews them first (`publish_runs`: `auto`, `review` or `review_until_deadline`; `publish_deadline`).
+   - Houston never closes issues; people do. This isn't a setting.
+
+   Check each repo's visibility (`gh repo view <repo> --json visibility`); if any is public, recommend `summary_on_issue: false` and say why: summaries would publish private work. Houston reads GitHub activity, the person's Claude Code sessions and their inbox file; there is nothing else to connect, so don't ask about other sources.
 
 Then draft `houston.yml` and the cadences: copy the chosen preset files from `.houston/presets/<preset>/cadences/`, edited to the answers. Set `core:` to the contents of `.houston/VERSION`. Leave out anything that matches the defaults (`houston explain` shows them later). The shape:
 
@@ -93,25 +102,26 @@ Show one table, then ask "Go ahead?":
 | --- | --- |
 | Files written | `houston.yml`, `cadences/*.md` (first person); `houston.local.yml`, `AGENTS.local.md` |
 | Repos linked | each repo, its path, and the two hidden files (`.houston`, `.houston-inbox.md`) |
-| Global block | `~/.claude/CLAUDE.md`, between `<!-- houston:begin -->` and `<!-- houston:end -->` |
+| Global block | `~/.claude/CLAUDE.md`, between `<!-- houston:begin -->` and `<!-- houston:end -->`, listing this Houston repo |
 | Removed | what the person chose in step 2 |
 | Commit | `houston.yml` and `cadences/` with a one-line message (first person) |
+| Labels | the status, priority and kind labels created in every team repo (first person) |
 
 Done when the person approves the plan, or has changed it and approved the new one.
 
 ### 6. Apply
 
 1. Remove what step 2 agreed to remove.
-2. First person: write `houston.yml` and `cadences/`, run `houston validate`, then commit them (`git add houston.yml cadences && git commit -m "Set up Houston for <team>"`). Ask before pushing.
-3. Clone any repos agreed in step 4, then run `houston link` with the `--repo` overrides from step 4. It writes the files, the global block, sets `commit.gpgsign false` and `core.symlinks false` in this repo, and trusts the core.
-4. **Schedule.** Run `houston schedule` and show the person its output. Houston doesn't install schedules: they put the one instruction in a scheduler they already use, at the suggested times (their agent app's scheduled tasks, an orchestrator, cron or launchd). If you have a scheduler tool yourself, offer to create the task, on this machine and never in the cloud: the run needs this laptop's repos and sessions. Once it exists, record it in one sentence naming the scheduler, the task's name and when it runs: `houston schedule --set "T3 Code task 'Houston run', Mon–Fri 09:00, 09:45, 12:00, 15:00, 18:00 Asia/Kolkata"`.
+2. First person: write `houston.yml` and `cadences/`, run `houston validate`, then commit them (`git add houston.yml cadences && git commit -m "Set up Houston for <team>"`). Ask before pushing. Then run `houston labels sync`: it creates the status, priority and kind labels in every team repo, which must exist before any run or intake changes an issue's status.
+3. Clone any repos agreed in step 4, then run `houston link` with the `--repo` overrides from step 4. It writes the files, adds this repo to the global block, sets `commit.gpgsign false` and `core.symlinks false` in this repo, and trusts the core (which makes the copy of it that schedules run).
+4. **Schedule.** Run `houston schedule` and show the person its output. Houston doesn't install schedules: they put the one instruction it prints, exactly as printed, in a scheduler they already use, at the suggested times (their agent app's scheduled tasks, an orchestrator, cron or launchd). The instruction runs the trusted copy under `.houston-local/core/`, never `.houston/bin/houston`, so a core change someone pushes doesn't run until the person trusts it. If you have a scheduler tool yourself, offer to create the task, on this machine and never in the cloud: the run needs this laptop's repos and sessions. Once it exists, record it in one sentence naming the scheduler, the task's name and when it runs: `houston schedule --set "T3 Code task 'Houston run', Mon–Fri 09:00, 09:45, 12:00, 15:00, 18:00 Asia/Kolkata"`.
 5. Run `houston doctor`.
 
-Done when `houston doctor` shows no ✗ and the person confirms the schedule exists.
+Done when `houston doctor` shows no ✗ and the person confirms the schedule exists. A `!` for the Houston block is fine only if the person chose `--no-global`.
 
 ### 7. Show
 
-Run `houston collect` and walk the person through what it found since yesterday: their issues, PRs, sessions and inbox lines, each source's health. This is exactly what a run reads. If something is missing (a repo, a source), fix it now.
+Run `houston collect` and walk the person through what it found since yesterday: their issues, PRs, sessions and inbox lines, each source's health. This is exactly what a run reads. If a repo is missing, fix its link now (`houston link --repo owner/name=/path`).
 
 Done when the person has seen the digest and says it found the right work.
 
@@ -121,4 +131,6 @@ Done when the person has seen the digest and says it found the right work.
 - **"I cloned a new repo"**: run `houston link --dry-run`, show what it would change, then `houston link` (with `--repo owner/name=/path` if the clone is outside the usual folders). If the repo isn't in `houston.yml`, it's a team change: use the change-setup skill.
 - **"Show me my schedule again"**: run `houston schedule` and show its output, including the recorded schedule.
 - **"Change my run time"**: run `houston schedule`, change the task in their scheduler, then `houston schedule --set "<new sentence>"`.
-- **"Stop my runs"**: run `houston link --remove --dry-run`, show what it removes, then `houston link --remove` after they agree. It keeps an inbox that still has notes unless they agree to `--force`. Then tell them to delete the scheduled task named in its output; Houston can't do that for them.
+- **"Stop my runs"**: two parts, both needed.
+  1. Run `houston link --remove --dry-run`, show what it removes, then `houston link --remove` after they agree. It takes this Houston repo out of the global block (other teams' repos stay listed) and keeps an inbox that still has notes unless they agree to `--force`.
+  2. Remove their scheduled task: the one named in `houston.local.yml`'s `schedule:` line (`houston link --remove` prints it). If it's in a scheduler you can use, offer to delete it; otherwise tell them where it is. Until it's gone, their scheduler keeps starting runs.

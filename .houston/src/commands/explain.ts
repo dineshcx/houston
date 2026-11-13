@@ -1,7 +1,7 @@
 // houston explain: the team's setup in plain words, for people and for the app's Setup page.
 import type { Command } from "../command";
 import { loadCadences, type Cadence } from "../lib/cadence";
-import { loadTeam, type Rules, type Source, type Team } from "../lib/config";
+import { loadTeam, type Rules, type Team } from "../lib/config";
 import { daysInWords } from "../lib/setup";
 
 const PERIOD: Record<Cadence["period"], (c: Cadence) => string> = {
@@ -11,31 +11,20 @@ const PERIOD: Record<Cadence["period"], (c: Cadence) => string> = {
   sprint: (c) => `one page per ${c.sprint!.days}-day sprint (sprints start ${c.sprint!.start} and every ${c.sprint!.days} days after)`,
 };
 
-function source(id: string, s: Source): string {
-  switch (s.kind) {
-    case "github":
-      return "GitHub activity";
-    case "transcript":
-      return `meeting transcripts (${id})`;
-    case "email":
-      return `email (${id})`;
-    case "slack":
-      return `Slack ${s.channel}${s.trigger === "reaction" ? `, threads someone reacts to with :${s.emoji ?? "ticket"}:` : ""}`;
-  }
-}
-
-/** What each rule value lets agents do, in a sentence. */
+/** What the rules let agents do, in sentences. */
 function rules(r: Rules): string[] {
-  const yes = (on: boolean, does: string, doesnt: string) => (on ? does : doesnt);
   return [
-    yes(r.status === "auto", "Move issues between the team's status columns.", "Never change an issue's status; people do."),
-    yes(r.labels === "auto", "Set priority and kind labels.", "Never change labels."),
-    yes(r.assign_self === "auto", "Assign an issue to the person whose agent is working on it.", "Never assign issues."),
-    { auto: "Create issues.", review: "Propose new issues; a person approves them in a pull request first.", never: "Never create issues." }[r.create_issue],
-    { auto: "Create sub-issues.", with_owner: "Create sub-issues only in a session with the issue's owner.", never: "Never create sub-issues." }[r.sub_issues],
-    yes(r.close_issue === "auto", "Close issues that are done.", "Never close an issue; people do."),
-    { none: "Never comment on issues.", blockers_only: "Comment on an issue only to flag a blocker or a question for someone.", summary_changes: "Comment on an issue when its summary changes." }[r.issue_comment],
-    yes(r.summary_on_issue, "Keep a living summary at the top of each issue they work on.", "Keep summaries off the issues."),
+    r.status === "auto" ? "Agents move issues between the team's status columns." : "Agents never change an issue's status; people do.",
+    r.labels === "auto" ? "Agents set priority and kind labels." : "Agents never change priority or kind labels.",
+    r.create_issue === "review" ? "Agents propose new issues from meetings and threads; a person approves them in a pull request before they're created." : "Houston never creates issues.",
+    r.sub_issues === "auto" ? "Work that spans repos gets one main issue with a sub-issue in each other repo." : "Houston never links sub-issues; related issues stay separate.",
+    {
+      none: "Agents never comment on issues.",
+      blockers_only: "Agents comment on an issue only to flag a blocker or a question for someone.",
+      summary_changes: "Agents comment on an issue when its summary changes.",
+    }[r.issue_comment],
+    r.summary_on_issue ? "Agents keep a living summary at the top of each issue they work on, and never touch the rest of the issue." : "Agents keep summaries off the issues.",
+    "Houston never closes issues; people do.",
   ];
 }
 
@@ -61,8 +50,7 @@ export function explain(team: Team, cadences: Record<string, Cadence>): string {
     out.push("");
   }
   out.push(`Status columns: ${team.status.columns.map((c) => `${c.name} (status:${c.label})`).join(", ")}.`);
-  out.push(`Work comes from: ${Object.entries(team.sources).map(([id, s]) => source(id, s)).join("; ")}.`, "");
-  out.push("What agents may do without asking:", ...rules(team.rules).map((r) => `  - ${r}`), "");
+  out.push("", "What Houston may do:", ...rules(team.rules).map((r) => `  - ${r}`), "");
   out.push("How runs publish:", `  ${publishing(team)}`);
   return out.join("\n");
 }

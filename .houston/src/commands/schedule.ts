@@ -7,8 +7,8 @@ import type { Command } from "../command";
 import { loadCadences } from "../lib/cadence";
 import { loadLocal, loadTeam } from "../lib/config";
 import { paths } from "../lib/paths";
-import { cronLines, daysInWords, houstonBin, instruction, localText, readLocalRaw, suggestRuns, systemTimezone } from "../lib/setup";
-import { HoustonError } from "../lib/util";
+import { cronLines, daysInWords, houstonRoot, instruction, localText, readLocalRaw, suggestRuns, systemTimezone, trustedBin } from "../lib/setup";
+import { HoustonError, UsageError } from "../lib/util";
 
 /** Cron starts jobs with a bare PATH, so the crontab line carries the folders of the tools a run needs. */
 function cronPath(): string {
@@ -21,8 +21,9 @@ export default {
   usage: `
 houston schedule [--set "<sentence>"]
 
-Prints \`houston run\` as your scheduler should run it, with suggested times from your team's
-cadences in your timezone. Houston doesn't install schedules; use any scheduler you like.
+Prints \`houston run\` as your scheduler should run it (the copy of the core you trusted), with
+suggested times from your team's cadences in your timezone. Houston doesn't install schedules;
+use any scheduler you like.
 
   --set "<sentence>"   record which scheduler runs it, its name and when, in houston.local.yml
                        (e.g. "crontab, Mon–Fri 09:00, 09:45, 12:00, 15:00, 18:00")`,
@@ -30,7 +31,7 @@ cadences in your timezone. Houston doesn't install schedules; use any scheduler 
     const { values } = parseArgs({ args, strict: true, allowPositionals: true, options: { set: { type: "string" } } });
     if (values.set !== undefined) {
       if (!existsSync(paths.local)) throw new HoustonError("No houston.local.yml yet. Run `houston link` first.");
-      if (!values.set.trim()) throw new HoustonError('Say which scheduler runs it and when, e.g. --set "crontab, Mon–Fri 09:00 and every 3h".');
+      if (!values.set.trim()) throw new UsageError('Say which scheduler runs it and when, e.g. --set "crontab, Mon–Fri 09:00 and every 3h".');
       writeFileSync(paths.local, localText({ ...readLocalRaw(), schedule: values.set.trim() }));
       return console.log(`Recorded: ${values.set.trim()}\nTo change or stop it later, use the same scheduler, then run this again.`);
     }
@@ -49,7 +50,7 @@ cadences in your timezone. Houston doesn't install schedules; use any scheduler 
 
     const sys = systemTimezone();
     console.log(`Example 1, crontab (\`crontab -e\`). Cron uses this machine's timezone (${sys})${sys !== local.timezone ? `, not ${local.timezone}: shift the hours to match` : ""}:\n`);
-    for (const line of cronLines(suggested, `cd ${paths.root} && PATH=${cronPath()} ${houstonBin()} run`)) console.log(`  ${line}`);
+    for (const line of cronLines(suggested, `cd ${houstonRoot()} && PATH=${cronPath()} ${trustedBin()} run`)) console.log(`  ${line}`);
     const byDays = new Map<string, string[]>();
     for (const r of suggested) byDays.set(daysInWords(r.days), [...(byDays.get(daysInWords(r.days)) ?? []), r.time]);
     const when = [...byDays].map(([days, times]) => `${times.join(", ")} on ${days}`).join("; and ");

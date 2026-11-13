@@ -1,0 +1,3 @@
+# Houston's Bun config, passed explicitly by bin/houston (`bun --config=…`).
+# It is empty on purpose: without it Bun would load a bunfig.toml from the folder it runs in (the
+# Houston repo), and a `preload` there would run code on every houston command. Keep it empty.

@@ -1,10 +1,12 @@
-// Evidence: the fixed matching order, exact-path session reading, inbox consumption, and failed sources.
+// Evidence: the fixed matching order, exact-path session reading, inbox consumption, failed sources,
+// and which GitHub events count as work.
 import { beforeAll, describe, expect, test } from "bun:test";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validateTeam, type Local, type Team } from "../src/lib/config";
 import { collect, consumeInbox, isQuiet, renderDigest, sessionDirName, type Digest } from "../src/lib/evidence";
+import { searchQueries, toActivity } from "../src/lib/github";
 
 const tmp = mkdtempSync(join(tmpdir(), "houston-evidence-"));
 const web = join(tmp, "web");
@@ -41,7 +43,10 @@ beforeAll(() => {
     JSON.stringify({
       login: "ana",
       issues: [issue(5, "Dark mode toggle"), issue(12, "Checkout retries")],
-      activity: [{ at: now(), repo: "acme/web", kind: "merged PR", number: 40, branch: "15-retry", text: "Retry with backoff\nFixes #12" }],
+      activity: [
+        { at: now(), repo: "acme/web", kind: "merged PR", number: 40, branch: "15-retry", text: "Retry with backoff\nFixes #12" },
+        { at: now(), repo: "acme/web", kind: "commit abcdef1", text: "Pushed from another laptop" },
+      ],
     }),
   );
   mkdirSync(web);
@@ -70,12 +75,13 @@ describe("collect", () => {
     const by = (text: string) => digest.items.find((e) => e.text.includes(text))!;
     expect(by("Fixes #12")).toMatchObject({ ref: "acme/web#12", why: "the PR references it" }); // beats its branch 15-retry
     expect(by("Retry checkout")).toMatchObject({ ref: "acme/web#12", why: "the commit message names it" });
-    expect(by("wip")).toMatchObject({ ref: "acme/web#7", why: "branch 7-login" });
+    expect(by("wip")).toMatchObject({ ref: "acme/web#7", why: "its branch name" });
     expect(by("reviewed the spec")).toMatchObject({ ref: "acme/web#9", why: "the inbox line names it" });
     expect(by("asked: Make the Dark mode")).toMatchObject({ ref: "acme/web#5", why: "it names the issue's title" });
     expect(by("tidy imports").ref).toBeUndefined();
     const text = renderDigest(digest, team);
-    expect(text).toContain("## acme/web#12 Checkout retries");
+    expect(text).toContain('## acme/web#12 <untrusted source="github title">Checkout retries</untrusted>');
+    expect(text).toContain('on <untrusted source="branch name">7-login</untrusted>');
     expect(text.split("## Other")[1]).toContain("tidy imports");
     expect(text).toContain('<untrusted source="git acme/web">tidy imports</untrusted>');
   });
@@ -85,6 +91,16 @@ describe("collect", () => {
     expect(all).toContain("last answer: Saved it in localStorage.");
     expect(all).not.toContain("secret admin");
     expect(all).not.toContain("command-name");
+  });
+
+  test("a commit seen both on GitHub and locally shows once, from git", () => {
+    const sha = Bun.spawnSync(["git", "-C", web, "log", "-1", "--format=%h", "main"]).stdout.toString().trim();
+    const d = JSON.parse(readFileSync(fake, "utf8"));
+    d.activity.push({ at: now(), repo: "acme/web", kind: `commit ${sha}`, text: "Retry checkout #12" });
+    writeFileSync(fake, JSON.stringify(d));
+    const again = collect(team, local, since);
+    expect(again.items.filter((e) => e.text === "Retry checkout #12").map((e) => e.source)).toEqual(["git"]);
+    expect(again.items.some((e) => e.text === "Pushed from another laptop")).toBe(true);
   });
 
   test("lists repos not on this machine and isn't quiet", () => {
@@ -107,5 +123,24 @@ describe("collect", () => {
     expect(d.sources.git).toBe("ok");
     expect(d.items.some((e) => e.text === "wip")).toBe(true);
     expect(isQuiet(d)).toBe(false); // a failed source never reads as a quiet day
+  });
+});
+
+describe("GitHub events", () => {
+  const event = (type: string, payload: object) => ({ type, created_at: now(), repo: { name: "acme/web" }, payload });
+
+  test("issue label, assignee and edit events aren't work (they're mostly Houston's own writes)", () => {
+    for (const action of ["labeled", "unlabeled", "edited", "assigned"]) expect(toActivity(event("IssuesEvent", { action, issue: { number: 12 }, label: { name: "status:in-review" } }))).toBeUndefined();
+    expect(toActivity(event("IssuesEvent", { action: "closed", issue: { number: 12, title: "Checkout retries" } }))).toMatchObject({ kind: "closed issue", number: 12 });
+    expect(toActivity(event("PushEvent", { ref: "refs/heads/main" }))).toBeUndefined(); // commits come from search
+  });
+
+  test("search queries are split to stay under GitHub's length limit", () => {
+    const repos = Array.from({ length: 12 }, (_, i) => `acme/a-fairly-long-repository-name-${i}`);
+    const qs = searchQueries("is:pr author:ana", repos);
+    expect(qs.length).toBeGreaterThan(1);
+    for (const q of qs) expect(q.length).toBeLessThanOrEqual(250);
+    expect(qs.join(" ").match(/repo:/g)!.length).toBe(12);
+    expect(searchQueries("x", [])).toEqual([]);
   });
 });

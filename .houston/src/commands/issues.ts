@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import type { Command } from "../command";
 import { loadLocal, loadTeam, teamRepos } from "../lib/config";
-import { github } from "../lib/github";
+import { github, refText } from "../lib/github";
 import { readSummary } from "../lib/issues";
 import { HoustonError } from "../lib/util";
 
@@ -14,7 +14,7 @@ export default {
   --mine      only issues assigned to you
   --json      print JSON`,
   run(args) {
-    const { values } = parseArgs({ args, strict: true, allowPositionals: true, options: { project: { type: "string" }, mine: { type: "boolean" }, json: { type: "boolean" } } });
+    const { values } = parseArgs({ args, strict: true, allowPositionals: false, options: { project: { type: "string" }, mine: { type: "boolean" }, json: { type: "boolean" } } });
     const team = loadTeam();
     if (values.project && !team.projects[values.project]) throw new HoustonError(`There is no project "${values.project}". Projects: ${Object.keys(team.projects).join(", ")}.`);
     const gh = github();
@@ -25,7 +25,7 @@ export default {
       .flatMap((r) =>
         gh.issues(r.repo, { assignee }).map((i) => {
           const label = i.labels.find((l) => l.startsWith("status:"));
-          return { ref: `${i.repo}#${i.number}`, project: r.project, title: i.title, status: label ? (columns.get(label) ?? label) : null, assignees: i.assignees, summary: readSummary(i.body) !== undefined, url: i.url };
+          return { ref: refText(i), project: r.project, title: i.title, status: label ? (columns.get(label) ?? label) : null, assignees: i.assignees, summary: readSummary(i.body) !== undefined, url: i.url };
         }),
       );
     if (values.json) return console.log(JSON.stringify(rows, null, 2));

@@ -1,8 +1,9 @@
-// The shared core: config validation, cadence time maths and the issue rules.
+// The shared core: config validation, cadence time maths, the issue rules and the run footer.
 import { describe, expect, test } from "bun:test";
 import { atZoned, nextOccurrence, parseCadence, parseSchedule, periodOf, nextPeriod, zoned } from "../src/lib/cadence";
 import { validateTeam, DEFAULT_RULES, type Team } from "../src/lib/config";
 import { planLabels, readSummary, replaceSummary } from "../src/lib/issues";
+import { footer, parseFooter, stripFooter } from "../src/lib/pages";
 
 const minimal = {
   houston: 1,
@@ -20,9 +21,9 @@ describe("houston.yml", () => {
   });
 
   test("every problem is reported in plain words, unknown keys included", () => {
-    const { errors } = validateTeam({ ...minimal, colour: "red", rules: { close_issue: "sometimes" }, projects: { web: { name: "Web", repos: ["not a repo"], cadences: ["weekly"] } } }, ["daily"]);
+    const { errors } = validateTeam({ ...minimal, colour: "red", rules: { create_issue: "sometimes" }, projects: { web: { name: "Web", repos: ["not a repo"], cadences: ["weekly"] } } }, ["daily"]);
     expect(errors.join("\n")).toContain("colour: unknown key");
-    expect(errors.join("\n")).toContain('rules.close_issue: "sometimes" is not allowed');
+    expect(errors.join("\n")).toContain('rules.create_issue: "sometimes" is not allowed');
     expect(errors.join("\n")).toContain("should be owner/name");
     expect(errors.join("\n")).toContain("there is no cadences/weekly.md");
   });
@@ -88,5 +89,16 @@ describe("issue rules", () => {
     expect(next).toBe("Intro by a person\n\n<!-- houston:summary -->\n**Goal:** new\n<!-- /houston:summary -->\n\nTail");
     expect(readSummary(next)).toBe("**Goal:** new");
     expect(replaceSummary("Person's text", "S")).toBe("<!-- houston:summary -->\nS\n<!-- /houston:summary -->\n\nPerson's text");
+  });
+});
+
+describe("the run footer", () => {
+  test("reads back what it writes", () => {
+    const line = footer(new Date("2026-11-13T03:30:00Z"), "Asia/Kolkata", { github: "ok", sessions: "failed: timeout" }, true);
+    expect(line).toBe("_run 09:00 · sources: github ok, sessions failed · not reviewed_");
+    expect(parseFooter(line)).toEqual({ time: "09:00", sources: { github: "ok", sessions: "failed" }, notReviewed: true });
+    expect(parseFooter("_run 09:00_")).toEqual({ time: "09:00", sources: {}, notReviewed: false });
+    expect(parseFooter("_running late_")).toBeUndefined();
+    expect(stripFooter(`## Done\n- x\n\n${line}`)).toBe("## Done\n- x");
   });
 });
